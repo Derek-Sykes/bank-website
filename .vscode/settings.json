@@ -1,0 +1,8 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "prettier.singleQuote": true,
+  "editor.wordWrap": "on",
+  "editor.wordWrapColumn": 120,
+  "CodeGPT.apiKey": "CodeGPT Plus Beta"
+}
