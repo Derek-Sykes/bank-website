@@ -1,0 +1,33 @@
+# Node modules
+node_modules/
+
+# Dependency caches
+.npm/
+.yarn/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directories (e.g., from istanbul/nyc)
+coverage/
+.nyc_output/
+
+# Build outputs
+dist/
+build/
+
+# Environment files
+.env
+.env.*.local
+
+# Miscellaneous
+.DS_Store
+*.tgz
