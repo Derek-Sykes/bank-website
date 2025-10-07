@@ -2,6 +2,57 @@
 
 A full‑stack personal finance dashboard (frontend: React/Vite; backend: Node/Express + MySQL). Users can sign up, log in, manage categories and accounts (“items”), and transfer funds between accounts.
 
+---
+
+
+## 💡 Product Concept: Mini‑Accounts (“fake buys”)
+
+**TL;DR:** You “buy” future things without actually spending money yet. The app sets aside portions of your real balance into named **mini‑accounts** (envelopes). Your **Spontaneous** (main) account is whatever remains unallocated. You can reassign money at any time.
+
+### Structure
+- **Account:** your login via email.
+- **Categories:** containers (e.g., *Travel*, *Electronics*, *Needs*).
+- **Mini‑accounts (items):** specific goals inside categories (e.g., *Spain trip*, *AirPods*, *Rent*).
+
+### Core behavior
+- Every purchase **defaults to Spontaneous** unless you assign it to a mini‑account.
+- If you assign after purchase, the amount is **moved** from that mini‑account’s balance (retroactive budgeting).
+- Each mini‑account can have a **goal/price** you’re aiming to hit.
+
+### Bank connections (optional / vision)
+- Connect one or more real bank accounts and map each mini‑account to a source account.
+- Enforce **budget constraints** using live balances (read‑only “live price” is enough).
+
+### Priority & timing controls
+- Set a **global priority** order across all mini‑accounts.
+- Optionally set **per‑category** priority.
+- Add **“no earlier than”** or **suggested buy dates** to nudge timing.
+
+### Auto‑allocation rules
+- Incoming money can be auto‑distributed by **percentages**.
+- **Fill‑first** lists: top off specific accounts before percentage rules run (based on order or priority).
+- **Stop allocating** to a mini‑account once its goal is met.
+- Support **hard rules** for monthly needs (rent, utilities, groceries).
+
+### Projections & wage integration (vision)
+- Store job/wage info, **project balances and completion dates** for goals.
+- Offer plan suggestions and **what‑if** adjustments.
+
+### Integration path (vision)
+- Partner with a bank so users can use either their **existing interface** or this **new budgeting layer** inside the bank’s app.
+
+### Example categories & goals
+- **Travel:** Spain, Italy, Argentina, Thailand  
+- **Electronics:** Portable charger, Speaker, AirPods, Computer, TV  
+- **Needs:** Rent, Utilities, Groceries, Car insurance, Car payment  
+- **Big buys:** Car, House, Backyard set, Home improvement  
+- **Events:** Concert, Basketball game, Festival, Hershey Park  
+- **Monthly spending:** Restaurants, Clothes, Entertainment, Subscriptions  
+- **Investments:** M1, Schwab, Roth IRA  
+
+> **Status:** Core CRUD for *categories/items* and *transfers* is implemented. Bank connections, wage projections, priority scheduling, and automated allocation are **planned** features.
+
+
 > **Repo layout**
 >
 > - `frontend/` – React + Vite app (defaults to `http://localhost:5173`)
@@ -211,3 +262,5 @@ INSERT INTO item (user_id, category_id, name, balance, goal) VALUES
 
 ## 👤 Author
 **Derek Sykes**
+
+---
