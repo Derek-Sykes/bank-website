@@ -59,6 +59,22 @@ A full‑stack personal finance dashboard (frontend: React/Vite; backend: Node/E
 > - `backend/` – Express API (hard‑coded to run on port **3000**)
 
 ---
+---
+
+## 📊 Project Status: What’s Done vs What’s Next
+
+### ✅ Currently Implemented
+- Core scaffolding in place
+
+### 🔜 Up Next / Not Yet Implemented
+- Auto-allocation percentages and fill-first rules
+- Bank account connections / aggregators
+- Investment account linking
+- No-earlier-than / suggested buy dates
+- Priority ranking (global and per-category)
+- Wage/job integration and projections
+
+### 🔎 Pointers to code
 
 ## 🛠 Tech Stack (from `backend/package.json`)
 - **Node.js (ES modules)** + **Express**
