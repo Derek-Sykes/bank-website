@@ -4,33 +4,61 @@ A full-stack budgeting dashboard built with React (Vite) on the frontend and Nod
 
 ---
 
-## Product Concept: Mini-Accounts Budgeting
-The app treats every purchase goal as its own "mini account" so you can earmark money without opening extra bank accounts. Your login creates:
+## 💡 Product Concept: Mini‑Accounts (“fake buys”)
 
-- **Account:** the user profile accessed via email and password.
-- **Categories:** high-level buckets such as Travel, Bills, Gear, or Emergencies.
-- **Items (mini accounts):** individual goals inside categories (Spain trip, Rent, New Laptop). Each item tracks its desired cost plus the balance you have already set aside.
-- **Spontaneous balance:** any money not assigned to an item remains available for ad-hoc spending.
+**TL;DR:** You “buy” future things without actually spending money yet. The app sets aside portions of your real balance into named **mini‑accounts** (envelopes). Your **Spontaneous** (main) account is whatever remains unallocated. You can reassign money at any time.
 
-### Current Workflow
-- Register or log in; the backend creates a seeded "Main Account" item with 5000 units for starters.
-- Create categories to mirror the areas of life you budget for.
-- Add items to represent upcoming purchases or savings targets, with optional `cost` and `description` fields.
-- Move money between items using the transfer API, keeping balances in sync without touching the database manually.
-- Use the frontend pages to review totals by category and drill into the items that make up each bucket.
+### Structure
+- **Account:** your login via email.
+- **Categories:** containers (e.g., *Travel*, *Electronics*, *Needs*).
+- **Mini‑accounts (items):** specific goals inside categories (e.g., *Spain trip*, *AirPods*, *Rent*).
 
-### Longer-Term Vision
-- **Auto allocation:** when new money arrives, percentages or "fill first" rules top up priority items automatically.
-- **Timing nudges:** add "no earlier than" or suggested purchase dates so the app surfaces when a goal is ready.
-- **Priority ladders:** enforce a global or per-category order that redistributes funds when an item reaches its goal.
-- **External accounts:** connect read-only bank data so the real checking balance drives what is available for envelopes.
-- **Redistribution flows:** when categories or items are deleted, choose whether balances funnel to the main account or reallocate according to saved rules.
-- **Income planning:** store job and wage details to project when goals will be met and surface what-if scenarios.
+### Core behavior
+- Every purchase **defaults to Spontaneous** unless you assign it to a mini‑account.
+- If you assign after purchase, the amount is **moved** from that mini‑account’s balance (retroactive budgeting).
+- Each mini‑account can have a **goal/price** you’re aiming to hit.
 
-This vision keeps the README aligned with the project’s future direction while the repository delivers the working CRUD, authentication, and transfer backbone today.
+### Bank connections (optional / vision)
+- Connect one or more real bank accounts and map each mini‑account to a source account.
+- Enforce **budget constraints** using live balances (read‑only “live price” is enough).
+
+### Priority & timing controls
+- Set a **global priority** order across all mini‑accounts.
+- Optionally set **per‑category** priority.
+- Add **“no earlier than”** or **suggested buy dates** to nudge timing.
+
+### Auto‑allocation rules
+- Incoming money can be auto‑distributed by **percentages**.
+- **Fill‑first** lists: top off specific accounts before percentage rules run (based on order or priority).
+- **Stop allocating** to a mini‑account once its goal is met.
+- Support **hard rules** for monthly needs (rent, utilities, groceries).
+
+### Projections & wage integration (vision)
+- Store job/wage info, **project balances and completion dates** for goals.
+- Offer plan suggestions and **what‑if** adjustments.
+
+### Integration path (vision)
+- Partner with a bank so users can use either their **existing interface** or this **new budgeting layer** inside the bank’s app.
+
+### Example categories & goals
+- **Travel:** Spain, Italy, Argentina, Thailand  
+- **Electronics:** Portable charger, Speaker, AirPods, Computer, TV  
+- **Needs:** Rent, Utilities, Groceries, Car insurance, Car payment  
+- **Big buys:** Car, House, Backyard set, Home improvement  
+- **Events:** Concert, Basketball game, Festival, Hershey Park  
+- **Monthly spending:** Restaurants, Clothes, Entertainment, Subscriptions  
+- **Investments:** M1, Schwab, Roth IRA  
+
+> **Status:** Core CRUD for *categories/items* and *transfers* is implemented. Bank connections, wage projections, priority scheduling, and automated allocation are **planned** features.
+
+
+> **Repo layout**
+>
+> - `frontend/` – React + Vite app (defaults to `http://localhost:5173`)
+> - `backend/` – Express API (hard‑coded to run on port **3000**)
 
 ---
-
+---
 ## Project Structure
 - `backend/` - Express API (`index.js`) with routes under `routes/`, database helpers in `db/`, token utilities in `controllers/token.js`, and auth middleware in `middleware/authenticateToken.js`.
 - `frontend/` - React + Vite app. Screens live in `src/pages`, shared auth context in `context/AuthContext.tsx`, and Axios API clients in `src/api_requests/`.
