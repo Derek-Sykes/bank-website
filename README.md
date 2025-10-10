@@ -1,282 +1,194 @@
-# 💸 Bank Website
+# Bank Website
 
-A full‑stack personal finance dashboard (frontend: React/Vite; backend: Node/Express + MySQL). Users can sign up, log in, manage categories and accounts (“items”), and transfer funds between accounts.
-
----
-
-
-## 💡 Product Concept: Mini‑Accounts (“fake buys”)
-
-**TL;DR:** You “buy” future things without actually spending money yet. The app sets aside portions of your real balance into named **mini‑accounts** (envelopes). Your **Spontaneous** (main) account is whatever remains unallocated. You can reassign money at any time.
-
-### Structure
-- **Account:** your login via email.
-- **Categories:** containers (e.g., *Travel*, *Electronics*, *Needs*).
-- **Mini‑accounts (items):** specific goals inside categories (e.g., *Spain trip*, *AirPods*, *Rent*).
-
-### Core behavior
-- Every purchase **defaults to Spontaneous** unless you assign it to a mini‑account.
-- If you assign after purchase, the amount is **moved** from that mini‑account’s balance (retroactive budgeting).
-- Each mini‑account can have a **goal/price** you’re aiming to hit.
-
-### Bank connections (optional / vision)
-- Connect one or more real bank accounts and map each mini‑account to a source account.
-- Enforce **budget constraints** using live balances (read‑only “live price” is enough).
-
-### Priority & timing controls
-- Set a **global priority** order across all mini‑accounts.
-- Optionally set **per‑category** priority.
-- Add **“no earlier than”** or **suggested buy dates** to nudge timing.
-
-### Auto‑allocation rules
-- Incoming money can be auto‑distributed by **percentages**.
-- **Fill‑first** lists: top off specific accounts before percentage rules run (based on order or priority).
-- **Stop allocating** to a mini‑account once its goal is met.
-- Support **hard rules** for monthly needs (rent, utilities, groceries).
-
-### Projections & wage integration (vision)
-- Store job/wage info, **project balances and completion dates** for goals.
-- Offer plan suggestions and **what‑if** adjustments.
-
-### Integration path (vision)
-- Partner with a bank so users can use either their **existing interface** or this **new budgeting layer** inside the bank’s app.
-
-### Example categories & goals
-- **Travel:** Spain, Italy, Argentina, Thailand  
-- **Electronics:** Portable charger, Speaker, AirPods, Computer, TV  
-- **Needs:** Rent, Utilities, Groceries, Car insurance, Car payment  
-- **Big buys:** Car, House, Backyard set, Home improvement  
-- **Events:** Concert, Basketball game, Festival, Hershey Park  
-- **Monthly spending:** Restaurants, Clothes, Entertainment, Subscriptions  
-- **Investments:** M1, Schwab, Roth IRA  
-
-> **Status:** Core CRUD for *categories/items* and *transfers* is implemented. Bank connections, wage projections, priority scheduling, and automated allocation are **planned** features.
-
-
-> **Repo layout**
->
-> - `frontend/` – React + Vite app (defaults to `http://localhost:5173`)
-> - `backend/` – Express API (hard‑coded to run on port **3000**)
-
----
----
-
-## 📊 Project Status: What’s Done vs What’s Next
-
-### ✅ Currently Implemented
-- Core scaffolding in place
-
-### 🔜 Up Next / Not Yet Implemented
-- Auto-allocation percentages and fill-first rules
-- Bank account connections / aggregators
-- Investment account linking
-- No-earlier-than / suggested buy dates
-- Priority ranking (global and per-category)
-- Wage/job integration and projections
-
-### 🔎 Pointers to code
-
-## 🛠 Tech Stack (from `backend/package.json`)
-- **Node.js (ES modules)** + **Express**
-- **mysql2** for database access
-- **dotenv** for env configuration
-- **bcrypt** for password hashing
-- **jsonwebtoken** for JWTs
-- **cookie-parser**
-- **cors**
+A full-stack budgeting dashboard built with React (Vite) on the frontend and Node.js/Express on the backend. Users register, manage goal-based "items" inside categories, and move balances between them. MySQL stores authentication data, categories, items, and transfer results.
 
 ---
 
-## 🚦 Run It
+## Product Concept: Mini-Accounts Budgeting
+The app treats every purchase goal as its own "mini account" so you can earmark money without opening extra bank accounts. Your login creates:
 
-### 1) Backend
+- **Account:** the user profile accessed via email and password.
+- **Categories:** high-level buckets such as Travel, Bills, Gear, or Emergencies.
+- **Items (mini accounts):** individual goals inside categories (Spain trip, Rent, New Laptop). Each item tracks its desired cost plus the balance you have already set aside.
+- **Spontaneous balance:** any money not assigned to an item remains available for ad-hoc spending.
+
+### Current Workflow
+- Register or log in; the backend creates a seeded "Main Account" item with 5000 units for starters.
+- Create categories to mirror the areas of life you budget for.
+- Add items to represent upcoming purchases or savings targets, with optional `cost` and `description` fields.
+- Move money between items using the transfer API, keeping balances in sync without touching the database manually.
+- Use the frontend pages to review totals by category and drill into the items that make up each bucket.
+
+### Longer-Term Vision
+- **Auto allocation:** when new money arrives, percentages or "fill first" rules top up priority items automatically.
+- **Timing nudges:** add "no earlier than" or suggested purchase dates so the app surfaces when a goal is ready.
+- **Priority ladders:** enforce a global or per-category order that redistributes funds when an item reaches its goal.
+- **External accounts:** connect read-only bank data so the real checking balance drives what is available for envelopes.
+- **Redistribution flows:** when categories or items are deleted, choose whether balances funnel to the main account or reallocate according to saved rules.
+- **Income planning:** store job and wage details to project when goals will be met and surface what-if scenarios.
+
+This vision keeps the README aligned with the project’s future direction while the repository delivers the working CRUD, authentication, and transfer backbone today.
+
+---
+
+## Project Structure
+- `backend/` - Express API (`index.js`) with routes under `routes/`, database helpers in `db/`, token utilities in `controllers/token.js`, and auth middleware in `middleware/authenticateToken.js`.
+- `frontend/` - React + Vite app. Screens live in `src/pages`, shared auth context in `context/AuthContext.tsx`, and Axios API clients in `src/api_requests/`.
+- `bank_app.sql` - MySQL schema dump used by the project.
+- `backend.env.example` - Template for backend environment variables.
+
+## Implemented Features
+- Email/password registration, login, logout, and session checks backed by bcrypt hashing and JWTs.
+- Access tokens (15 minutes) issued in responses; refresh tokens (1 day) stored in MySQL and sent as httpOnly cookies.
+- Protected category and item routes enforced by `authenticateToken`.
+- Automatic creation of a "Main Account" item seeded with a 5000 balance for every new user.
+- Transfers between items handled with a single SQL update to keep balances in sync.
+- React app with persistent session restoration, protected routes, and Axios hooks for users, items, and categories.
+
+## Planned Features
+- Automatic allocation rules and percentage-based budgeting.
+- External bank account integrations and investment tracking.
+- Priority scheduling, "no earlier than" reminders, and wage projections.
+- Redistribution flows when deleting categories or items.
+- Better handling for deletions when balances remain.
+
+## Tech Stack
+- **Backend:** Node.js 18+, Express, MySQL (`mysql2`), bcrypt, jsonwebtoken, dotenv, cookie-parser, cors, nodemon.
+- **Frontend:** React 18, TypeScript, Vite, React Router, Axios, ESLint, Prettier.
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18 or newer.
+- MySQL 8 (with a user that can create/use a `bank_app` schema).
+
+### Backend Setup
+1. `cd backend`
+2. Copy `backend.env.example` to `.env` and fill in MySQL credentials plus JWT secrets.
+3. `npm install`
+4. `npm run dev` (or `npm start`) - listens on `http://localhost:3000`.
+
+CORS currently allows `http://localhost:5173` and sends credentials so cookies reach the browser.
+
+### Frontend Setup
+1. `cd frontend`
+2. `npm install`
+3. `npm run dev`
+4. Open http://localhost:5173 (Vite dev server).
+
+### Database Setup
 ```bash
-cd backend
-npm install
-npm run dev   # or: npm start
+mysql -u <user> -p < bank_app.sql
 ```
-- The API listens on **http://localhost:3000** (port is hard‑coded in `backend/index.js`).
-- CORS is configured to allow the frontend origin `http://localhost:5173` and to send credentials (cookies/headers).
+`db/itemDB.js` references `UPDATE bank_app.item ...`, so keep the schema name as `bank_app` unless you update the code.
 
-### 2) Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-- Vite dev server defaults to **http://localhost:5173**.
+## Authentication Flow
+- `generateAccessToken` signs user payloads with `ACCESS_TOKEN` and expires in 15 minutes.
+- `generateRefreshToken` signs with `REFRESH_TOKEN`, expires in 1 day, stores the token in `user.refresh_token`, and returns it as an httpOnly cookie.
+- All protected routes pass through `authenticateToken`. When the access token has expired but the refresh token is valid, the middleware responds with `{ accessToken: "<new token>", message: "retry request" }`. The frontend (`AuthContext` and Axios hooks) checks for `response.data.accessToken` and updates the in-memory token before retrying the call.
+- Logout clears the stored refresh token in the database (`removeRefreshTokenDB`) and removes the cookie.
 
----
+Key files: `backend/index.js`, `backend/routes/users.js`, `backend/routes/items.js`, `backend/routes/category.js`, `backend/middleware/authenticateToken.js`, `backend/controllers/token.js`, `backend/db/*.js`, `frontend/context/AuthContext.tsx`, `frontend/src/api_requests/*.tsx`.
 
-## 🔐 Auth Model (as implemented)
-- **Access Token**: short‑lived (~15 minutes) – signed using `ACCESS_TOKEN` secret.
-- **Refresh Token**: longer‑lived (~1 day) – signed using `REFRESH_TOKEN` secret and **stored in the DB** (see `controllers/token.js` and `middleware/authenticateToken.js`).
+## API Reference
 
-The backend mounts routes like this (from `backend/index.js`):
+### Users (`/users`)
+- `POST /users/register`
+  ```json
+  { "user": { "email": "demo@example.com", "password": "secret", "f_name": "Demo", "l_name": "User" } }
+  ```
+- `POST /users/login`
+  ```json
+  { "user": { "email": "demo@example.com", "password": "secret" } }
+  ```
+- `POST /users/logout` - clears the refresh token in DB and cookie.
+- `GET /users/session` - returns the decoded refresh token payload when a session is active.
 
-- `app.use("/users", userRoutes)` – **unprotected** (login/register/etc.).
-- `app.use(authenticateToken)` – middleware; routes **below** this require a valid access token (or a valid refresh flow).
-- `app.use("/items", itemRoutes)` – protected.
-- `app.use("/categorys", categoryRoutes)` – protected (**note the spelling `categorys`**).
+### Items (`/items`)
+Protected by `authenticateToken`. Include `Authorization: Bearer <accessToken>` and ensure the refresh-token cookie is sent (`withCredentials: true` in Axios).
 
-The frontend Axios instances point to `http://localhost:3000` with `withCredentials: true`.
+- `GET /items/item` - optional query params:
+  - `type`: one of `item_id`, `name`, `description`, `cost`, `balance`, `category_id`, `user_id`.
+  - `value`: string or numeric, depending on `type`.
+  Examples:
+  - `GET /items/item` - returns all items for the authenticated user.
+  - `GET /items/item?type=name&value=Checking`
+- `POST /items/item`
+  ```json
+  { "name": "New Account", "description": "Optional", "cost": 500, "category_id": 2 }
+  ```
+  The backend sets `balance` to 0.
+- `PUT /items/item`
+  ```json
+  { "item_id": 3, "name": "Updated", "cost": 450, "balance": 200, "category_id": 2 }
+  ```
+- `DELETE /items/item`
+  ```json
+  { "item_id": 3 }
+  ```
 
----
+### Transfers
+- `PUT /items/transfer`
+  ```json
+  { "item_id1": 3, "item_id2": 4, "amount": 125.5 }
+  ```
+  Subtracts from `item_id1`, adds to `item_id2` in a single SQL call.
 
-## ⚙️ Environment Variables (required by backend)
-Create a `.env` file in **`backend/`** with the following keys:
+### Categories (`/categorys`)
+Route names match the backend code (`/categorys/category`). Changing them requires updating both server and client.
 
-```
-# MySQL connection
-MYSQL_HOST=localhost
-MYSQL_USER=your_mysql_user
-MYSQL_PASSWORD=your_mysql_password
+- `GET /categorys/category` - expects the request body to optionally include `{ "category_id": 5 }`. The frontend sends this using Axios `data` even though it is a GET request.
+- `POST /categorys/category`
+  ```json
+  { "name": "Travel", "description": "Trips and experiences" }
+  ```
+- `PUT /categorys/category`
+  ```json
+  { "category_id": 5, "name": "Travel", "description": "Updated" }
+  ```
+- `DELETE /categorys/category`
+  ```json
+  { "category_id": 5, "options": { "redistribute": "main" } }
+  ```
+  `options` is reserved for future redistribution logic.
 
-# IMPORTANT: Because some queries fully-qualify the schema (e.g., UPDATE bank_app.item),
-# the database MUST be named 'bank_app' unless you modify those queries.
-MYSQL_DATABASE=bank_app
+## Database Schema
+See `bank_app.sql` for the authoritative definition. Summary:
+- `user` - `user_id`, `email` (unique), `password` (bcrypt hash), `f_name`, `l_name`, `refresh_token`.
+- `category` - `category_id`, `name` (45 chars), `description` (200 chars), `user_id` (FK, cascade delete).
+- `item` - `item_id`, `name` (45 chars), `description`, `cost` (double), `balance` (double, default 0), `category_id` (FK), `user_id` (FK).
 
-# JWT secrets
-ACCESS_TOKEN=your_access_token_secret
-REFRESH_TOKEN=your_refresh_token_secret
-```
+During registration the backend creates a `Main Account` item with a starting balance of 5000 for the new `user_id`.
 
-> The code uses `dotenv` to load these. The backend’s port is **fixed to 3000** in code (not read from env).
+## Frontend Overview
+- `context/AuthContext.tsx` manages the signed-in user, in-memory access token, and session refresh logic.
+- `src/pages/` holds feature screens: `Home.tsx`, `CategoryPage.tsx`, `AccountsPage.tsx`, `AuthPage.tsx`, `About.tsx`.
+- `src/api_requests/` centralizes Axios calls for users (`users.tsx`), items (`items.tsx`), and categories (`category.tsx`), including token refresh handling.
+- `App.tsx` wires routing with React Router and renders pages based on auth state.
 
----
-
-## 🗄️ Database Requirements (MySQL)
-
-The backend uses **MySQL** via `mysql2`. Pool creation reads `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, and `MYSQL_DATABASE`. **One query references the schema `bank_app` explicitly** (`UPDATE bank_app.item ...` in `db/itemDB.js`), so—**to run unmodified—you must name your DB `bank_app`**.
-
-Below is a DDL that matches the routes and queries found in `db/*.js` and the frontend usage (items, categories, users, and transfers). You can run this script in MySQL Workbench or the CLI:
-
-```sql
--- Create schema
-CREATE DATABASE IF NOT EXISTS bank_app CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE bank_app;
-
--- Users table (table name is `user` in code)
--- Note: `user` is a reserved keyword; we use backticks.
-CREATE TABLE IF NOT EXISTS `user` (
-  user_id INT AUTO_INCREMENT PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
-  f_name VARCHAR(100) NULL,
-  l_name VARCHAR(100) NULL,
-  refresh_token VARCHAR(500) NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
-
--- Categories owned by a user
-CREATE TABLE IF NOT EXISTS category (
-  category_id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  name VARCHAR(120) NOT NULL,
-  description TEXT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_category_user
-    FOREIGN KEY (user_id) REFERENCES `user`(user_id)
-    ON DELETE CASCADE
-) ENGINE=InnoDB;
-
--- Accounts / items
-CREATE TABLE IF NOT EXISTS item (
-  item_id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  category_id INT NULL,
-  name VARCHAR(120) NOT NULL,
-  balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-  goal DECIMAL(12,2) NULL,
-  description TEXT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_item_user
-    FOREIGN KEY (user_id) REFERENCES `user`(user_id)
-    ON DELETE CASCADE,
-  CONSTRAINT fk_item_category
-    FOREIGN KEY (category_id) REFERENCES category(category_id)
-    ON DELETE SET NULL,
-  INDEX idx_item_user (user_id),
-  INDEX idx_item_category (category_id)
-) ENGINE=InnoDB;
-
--- Helpful indexes (based on typical lookups in db files)
-CREATE INDEX IF NOT EXISTS idx_user_email ON `user`(email);
-```
-
-### Why these columns?
-- `user` table: required for login (`email`/`password_hash`) and for storing `refresh_token` (see `controllers/token.js` / `db/userDB.js`).
-- `category` table: used by routes under `/categorys` with CRUD operations (`postCategory`, `getCategorys`, `updateCategory`, `deleteCategory`).
-- `item` table: used by routes under `/items` with CRUD and a **transfer** operation that updates two rows’ `balance` fields in a single SQL `UPDATE ... CASE` statement (`db/itemDB.js`).
-
-> In `db/categoryDB.js` you’ll see `DELETE FROM category WHERE category_id = ? && user_id = ?` and similar `UPDATE` statements; in `db/itemDB.js` you’ll see the multi‑row `UPDATE bank_app.item SET balance = CASE ...` pattern for transfers. The frontend components (`AccountsPage.tsx`, `TransferFunds.tsx`) rely on `item_id`, `name`, `balance`, and (optionally) `goal`.
-
----
-
-## 🔌 API Shape (as used by the frontend)
-
-> Base URL: `http://localhost:3000`
-
-### Users (`/users` – unprotected)
-- `POST /users/register`  
-  Body (as used by frontend): `{ email, password, f_name, l_name }`
-- `POST /users/login`  
-  Body: `{ user: { email, password } }`  
-  Sets/returns tokens (access token + refresh handling).
-- `POST /users/logout`  
-  Clears server‑side refresh token association.
-- `GET /users/session`  
-  Returns current session status.
-
-### Items (`/items` – protected by `authenticateToken`)
-- `GET /items` – fetch accounts/items (optionally by filters used in your UI).
-- `POST /items/item` – create an item.
-- `PUT /items/item` – update an item.
-- `DELETE /items/item` – delete an item.
-- `PUT /items/transfer` – transfer funds.  
-  Body: `{ item_id1, item_id2, amount }` (see `frontend/src/api_requests/items.tsx` & `TransferFunds.tsx`).
-
-### Categories (`/categorys` – protected; spelling intentional)
-- `GET /categorys/category` – list categories.
-- `POST /categorys/category` – create category (`name`, optional `description`).
-- `PUT /categorys/category` – update category by `category_id`.
-- `DELETE /categorys/category` – delete category by `category_id`.  
-  Axios client sends the payload via `data` in the DELETE request.
-
-> Protected routes accept an **Authorization: Bearer \<accessToken\>** header. The backend middleware (`authenticateToken`) will also attempt a refresh flow if the access token is expired (using the DB‑stored refresh token).
-
----
-
-## 🧪 Quick Seed (optional)
+## Quick Seed
 ```sql
 USE bank_app;
 
-INSERT INTO `user` (email, password_hash, f_name, l_name)
-VALUES ('demo@example.com', '$2b$10$examplehashedpassword...', 'Demo', 'User');
+INSERT INTO user (email, password, f_name, l_name)
+VALUES ('demo@example.com', '<bcrypt-hash>', 'Demo', 'User');
 
--- sample categories
-INSERT INTO category (user_id, name, description) VALUES
-  (1, 'Main', 'Primary spending'),
-  (1, 'Savings', 'Set‑aside funds');
+INSERT INTO category (name, description, user_id)
+VALUES ('Main', 'Primary spending', 1),
+       ('Savings', 'Emergency fund', 1);
 
--- sample items/accounts
-INSERT INTO item (user_id, category_id, name, balance, goal) VALUES
-  (1, 1, 'Checking', 1200.00, NULL),
-  (1, 2, 'Emergency Fund', 3500.00, 5000.00);
+INSERT INTO item (name, description, cost, balance, category_id, user_id)
+VALUES ('Checking', 'Everyday spending', NULL, 1200, 1, 1),
+       ('Emergency Fund', '6 months of expenses', 5000, 3500, 2, 1);
 ```
+Generate the bcrypt hash through the app (registration) or a separate script to ensure it matches the expected 60-character format.
 
-> Replace `password_hash` with a real bcrypt hash generated by your app. The backend uses `bcrypt` with 10 salt rounds.
+## Notes & Gotchas
+- The `/categorys` spelling is intentional; update every reference if you change it.
+- `GET /categorys/category` reads from `req.body`, so Axios calls must supply payload via the `data` property.
+- Item transfers rely on the schema name `bank_app` in SQL (`db/itemDB.js`).
+- The backend runs as an ES module project (`"type": "module"`); use Node 18+.
+- CORS currently allows only `http://localhost:5173`.
 
----
-
-## 🧩 Notes & Gotchas
-- The database schema name `bank_app` is referenced explicitly in `db/itemDB.js` during transfers. If you prefer a different schema name, change the `UPDATE bank_app.item ...` query to `UPDATE item ...`.
-- The `/categorys` path spelling is intentional to match the code. Don’t rename it unless you update both backend routes and frontend API calls.
-- The backend uses **ESM** (`"type": "module"`). Use `import` syntax and run with a recent Node (v18+ recommended).
-
----
-
-## 👤 Author
-**Derek Sykes**
-
----
+## Author
+Derek Sykes
