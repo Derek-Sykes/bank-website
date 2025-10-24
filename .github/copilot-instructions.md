@@ -6,6 +6,7 @@
 ## Architecture & critical flow (read before changing code)
 
 - Authentication: short‑lived access tokens (15m) + refresh tokens (1d).
+
   - Access token: kept only in memory on the frontend (see `frontend/context/AuthContext.tsx`).
   - Refresh token: httpOnly cookie and stored in the DB (`user.refresh_token`). Backend endpoints rely on it.
   - When the backend refreshes an access token it responds with JSON: `{ accessToken: "<token>", message: "retry request" }` — client must update in‑memory token and retry the call.
@@ -35,26 +36,33 @@
 - Axios instance (used across `src/api_requests`):
 
 ```js
-const api = axios.create({ baseURL: 'http://localhost:3000', withCredentials: true });
+const api = axios.create({
+  baseURL: "http://localhost:3000",
+  withCredentials: true,
+});
 ```
 
 - Client should set Authorization header when an access token exists:
 
 ```js
-const headers = auth?.accessToken ? { Authorization: `Bearer ${auth.accessToken}` } : {};
-await api.get('/items/item', { headers, params });
+const headers = auth?.accessToken
+  ? { Authorization: `Bearer ${auth.accessToken}` }
+  : {};
+await api.get("/items/item", { headers, params });
 // If response.data.accessToken exists update AuthContext then retry the original call.
 ```
 
 ## Developer workflows & commands
 
 - Backend (Node 18+, uses ES modules):
+
   - cd backend
   - copy `backend.env.example` → `.env` and fill MySQL & JWT secrets
   - npm install
   - npm run dev (uses `nodemon`) or npm start
 
 - Frontend (Vite + TypeScript):
+
   - cd frontend
   - npm install
   - npm run dev (Vite dev server)
@@ -79,4 +87,5 @@ await api.get('/items/item', { headers, params });
 - Ask for the intended change and include: the route/file to change, new request/response shapes, and whether DB schema must change. Provide a small API contract example for the change.
 
 ---
+
 Small, targeted guidance so an AI coding assistant can make safe, repository‑specific edits quickly. If you'd like, I can (a) add a short section with examples for common PRs (auth fixes, add item/category route), or (b) open a PR draft that updates client/server when renaming `categorys` → `categories`.
