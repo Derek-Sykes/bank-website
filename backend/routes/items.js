@@ -31,7 +31,14 @@ router
     }
   })
   .post(async (req, res) => {
-    const { name, description, cost, category_id } = req.body;
+    const {
+      name,
+      description,
+      cost,
+      category_id,
+      allocation_percentage = 0,
+      status = "ACTIVE",
+    } = req.body;
     const balance = 0;
     let user_id;
     if (req.user) {
@@ -40,7 +47,16 @@ router
       user_id = null;
     }
 
-    const item = { name, description, cost, balance, category_id, user_id };
+    const item = {
+      name,
+      description,
+      cost,
+      balance,
+      category_id,
+      allocation_percentage,
+      status,
+      user_id,
+    };
     let feedback = await postItem(item);
     if (feedback === 1) {
       res.status(200).send("Successful post");
@@ -56,6 +72,8 @@ router
       cost = null,
       balance = null,
       category_id = null,
+      allocation_percentage = null,
+      status = null,
     } = req.body;
     let user_id = req.user.user_id;
     let error = await updateItem(
@@ -66,6 +84,8 @@ router
       balance,
       category_id,
       user_id,
+      allocation_percentage,
+      status,
     );
     if (error) {
       res.status(400).send("Error updating item, see console.");
@@ -96,7 +116,7 @@ router.route("/transfer").put(async (req, res) => {
 });
 
 // router.post("/makeItem", async (req, res) => {
-//   const { name, description, cost, category_id } = req.body;
+//   const { name, description, cost, category_id, allocation_percentage = 0, status = "ACTIVE" } = req.body;
 //   let user_id;
 //   if (req.user) {
 //     user_id = req.user.user_id;

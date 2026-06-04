@@ -28,10 +28,10 @@ router
     }
   })
   .post(async (req, res) => {
-    const { name, description = null } = req.body;
+    const { name, description = null, allocation_percentage = 0 } = req.body;
     let user_id = req.user.user_id;
 
-    const category = { name, description, user_id };
+    const category = { name, description, allocation_percentage, user_id };
     let feedback = await postCategory(category);
     if (feedback === 1) {
       res.status(200).send("Successful post");
@@ -40,9 +40,20 @@ router
     }
   })
   .put(async (req, res) => {
-    const { category_id, name, description = null } = req.body;
+    const {
+      category_id,
+      name,
+      description = null,
+      allocation_percentage = null,
+    } = req.body;
     let user_id = req.user.user_id;
-    let error = await updateCategory(category_id, name, description, user_id);
+    let error = await updateCategory(
+      category_id,
+      name,
+      description,
+      allocation_percentage,
+      user_id,
+    );
     if (error) {
       res.status(400).send("Error updating category, see console.");
     } else {

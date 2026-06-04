@@ -17,7 +17,7 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { getCategories, createCategory, updateCategory, deleteCategory } =
     useCategoryApi();
-  const { getItems } = useItemsApi();
+  const { getItems, addMoney } = useItemsApi();
 
   const [categories, setCategories] = useState<any[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -31,7 +31,7 @@ const HomePage: React.FC = () => {
 
   // State to hold the sum of balances for each category
   const [categorySums, setCategorySums] = useState<{ [key: number]: number }>(
-    {}
+    {},
   );
 
   // Options dropdown state for each category card
@@ -52,9 +52,17 @@ const HomePage: React.FC = () => {
   // Transfer modal state
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
+  // Add money modal state
+  const [isAddMoneyModalOpen, setIsAddMoneyModalOpen] = useState(false);
+  const [addMoneyAmount, setAddMoneyAmount] = useState("");
+  const [addMoneyNote, setAddMoneyNote] = useState("");
+  const [addMoneyError, setAddMoneyError] = useState("");
+  const [addMoneyResult, setAddMoneyResult] = useState<any | null>(null);
+  const [isAddingMoney, setIsAddingMoney] = useState(false);
+
   // Delete confirmation popup state
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(
-    null
+    null,
   );
 
   const fetchCategories = async () => {
@@ -103,10 +111,14 @@ const HomePage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
+  const refreshDashboardData = () => {
     fetchCategories();
     fetchMainAccount();
     fetchAllAccounts();
+  };
+
+  useEffect(() => {
+    refreshDashboardData();
   }, [auth?.accessToken]);
 
   // Compute category sums from the allAccounts array without making multiple API calls
@@ -115,11 +127,11 @@ const HomePage: React.FC = () => {
     categories.forEach((cat: any) => {
       // Assume each account has a property category_id
       const accountsForCat = allAccounts.filter(
-        (acc) => acc.category_id === cat.category_id
+        (acc) => acc.category_id === cat.category_id,
       );
       const sum = accountsForCat.reduce(
         (accum, account) => accum + Number(account.balance),
-        0
+        0,
       );
       sums[cat.category_id] = sum;
     });
@@ -159,8 +171,8 @@ const HomePage: React.FC = () => {
           prev.map((cat) =>
             cat.category_id === categoryToUpdate.category_id
               ? { ...cat, ...updatedData }
-              : cat
-          )
+              : cat,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -203,15 +215,55 @@ const HomePage: React.FC = () => {
     }
   };
 
+  const openAddMoneyModal = () => {
+    setAddMoneyAmount("");
+    setAddMoneyNote("");
+    setAddMoneyError("");
+    setAddMoneyResult(null);
+    setIsAddMoneyModalOpen(true);
+  };
+
+  const closeAddMoneyModal = () => {
+    setIsAddMoneyModalOpen(false);
+    setAddMoneyError("");
+  };
+
+  const handleSubmitAddMoney = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsedAmount = Number(addMoneyAmount);
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setAddMoneyError("Amount must be greater than 0.");
+      return;
+    }
+
+    try {
+      setIsAddingMoney(true);
+      setAddMoneyError("");
+      const response = await addMoney(
+        parsedAmount,
+        addMoneyNote.trim() || undefined,
+      );
+      setAddMoneyResult(response.data);
+      refreshDashboardData();
+    } catch (error: any) {
+      setAddMoneyError(
+        error?.response?.data?.message || "Unable to add money right now.",
+      );
+    } finally {
+      setIsAddingMoney(false);
+    }
+  };
+
   // Delete a category directly if no accounts exist
   const handleDeleteCategory = async (
     category_id: string | number,
-    options?: any
+    options?: any,
   ) => {
     try {
       await deleteCategory(category_id, options);
       setCategories((prev) =>
-        prev.filter((cat) => cat.category_id !== category_id)
+        prev.filter((cat) => cat.category_id !== category_id),
       );
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -302,8 +354,11 @@ const HomePage: React.FC = () => {
           )}
         </section>
 
-        {/* Transfer Funds & View Accounts Buttons */}
+        {/* Add Money, Transfer Funds & View Accounts Buttons */}
         <div style={styles.buttonsContainer}>
+          <button onClick={openAddMoneyModal} style={styles.actionButton}>
+            Add Money
+          </button>
           <button
             onClick={() => setIsTransferModalOpen(true)}
             style={styles.actionButton}
@@ -354,7 +409,7 @@ const HomePage: React.FC = () => {
                       setActiveOptions(
                         activeOptions === cat.category_id
                           ? null
-                          : cat.category_id
+                          : cat.category_id,
                       )
                     }
                   >
@@ -385,14 +440,90 @@ const HomePage: React.FC = () => {
         </section>
       </main>
 
+      {/* Add Money Modal */}
+      {isAddMoneyModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h2 style={styles.modalTitle}>Add Money</h2>
+            <form onSubmit={handleSubmitAddMoney}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Amount:</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={addMoneyAmount}
+                  onChange={(e) => setAddMoneyAmount(e.target.value)}
+                  style={styles.inputField}
+                  placeholder="0.00"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Note (optional):</label>
+                <input
+                  type="text"
+                  value={addMoneyNote}
+                  onChange={(e) => setAddMoneyNote(e.target.value)}
+                  style={styles.inputField}
+                  placeholder="Paycheck, gift, refund..."
+                />
+              </div>
+              {addMoneyError && <p style={styles.errorText}>{addMoneyError}</p>}
+              {addMoneyResult && (
+                <div style={styles.successBox}>
+                  <p style={styles.successText}>
+                    Added ${Number(addMoneyResult.amount_added).toFixed(2)} and
+                    auto-allocated $
+                    {Number(addMoneyResult.allocated_total).toFixed(2)}.
+                  </p>
+                  {addMoneyResult.categories?.length > 0 ? (
+                    <ul style={styles.resultList}>
+                      {addMoneyResult.categories.map((category: any) => (
+                        <li key={category.category_id}>
+                          {capitalize(category.name)}: $
+                          {Number(category.received).toFixed(2)}
+                          {Number(category.unallocated) > 0
+                            ? ` (${Number(category.unallocated).toFixed(2)} unallocated)`
+                            : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p style={styles.successText}>
+                      No category percentages are configured, so the money
+                      stayed in Main Account.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div style={styles.modalButtons}>
+                <button
+                  type="submit"
+                  style={styles.modalButton}
+                  disabled={isAddingMoney}
+                >
+                  {isAddingMoney ? "Adding..." : "Add Money"}
+                </button>
+                <button
+                  type="button"
+                  style={styles.modalButton}
+                  onClick={closeAddMoneyModal}
+                >
+                  {addMoneyResult ? "Close" : "Cancel"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Transfer Funds Modal */}
       {isTransferModalOpen && (
         <TransferFunds
           onClose={() => setIsTransferModalOpen(false)}
           onTransferSuccess={() => {
             // Optionally refresh main account or accounts list after a successful transfer.
-            fetchAllAccounts();
-            fetchMainAccount();
+            refreshDashboardData();
           }}
         />
       )}
@@ -750,6 +881,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#d32f2f",
     fontSize: "14px",
     marginTop: "5px",
+  },
+  successBox: {
+    backgroundColor: "#e8f5e9",
+    borderRadius: "6px",
+    padding: "12px",
+    marginTop: "12px",
+  },
+  successText: {
+    color: "#2e7d32",
+    fontSize: "14px",
+    margin: "0 0 8px 0",
+  },
+  resultList: {
+    color: "#2e7d32",
+    margin: 0,
+    paddingLeft: "20px",
+    textAlign: "left",
   },
   modalButtons: {
     display: "flex",

@@ -12,15 +12,20 @@ const pool = mysql
   .promise();
 
 export async function postCategory(category) {
-  let { name, description = null, user_id = null } = category;
+  let {
+    name,
+    description = null,
+    allocation_percentage = 0,
+    user_id = null,
+  } = category;
   console.log("CATEGORY spelled out: ", name, description, user_id);
   try {
     await pool.query(
       `
-            INSERT INTO category (name, description, user_id)
-            VALUES (?, ?, ?)
+            INSERT INTO category (name, description, allocation_percentage, user_id)
+            VALUES (?, ?, ?, ?)
             `,
-      [name, description, user_id],
+      [name, description, allocation_percentage, user_id],
     );
     return 1;
   } catch (error) {
@@ -63,11 +68,23 @@ export async function getCategorys(user_id) {
   }
 }
 
-export async function updateCategory(category_id, name, description, user_id) {
-  const query = `UPDATE category SET name = ?, description = ? WHERE category_id = ? && user_id = ?`;
+export async function updateCategory(
+  category_id,
+  name,
+  description,
+  allocation_percentage,
+  user_id,
+) {
+  const query = `UPDATE category SET name = ?, description = ?, allocation_percentage = COALESCE(?, allocation_percentage) WHERE category_id = ? && user_id = ?`;
 
   try {
-    await pool.query(query, [name, description, category_id, user_id]);
+    await pool.query(query, [
+      name,
+      description,
+      allocation_percentage,
+      category_id,
+      user_id,
+    ]);
     return null;
   } catch (error) {
     console.log(error);
