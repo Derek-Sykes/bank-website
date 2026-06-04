@@ -29,6 +29,7 @@ app.use("/users", userRoutes);
 app.use(authenticateToken);
 app.use("/items", itemRoutes);
 app.use("/categorys", categoryRoutes);
+app.use("/categories", categoryRoutes);
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
