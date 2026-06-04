@@ -27,6 +27,8 @@ CREATE TABLE `category` (
   `name` varchar(45) NOT NULL,
   `description` varchar(200) DEFAULT NULL,
   `user_id` int DEFAULT NULL,
+  `heldBalance` double DEFAULT '0',
+  `unallocatedAmount` double DEFAULT '0',
   PRIMARY KEY (`category_id`),
   UNIQUE KEY `category_id_UNIQUE` (`category_id`),
   KEY `user_id_idx` (`user_id`),
@@ -47,6 +49,9 @@ CREATE TABLE `item` (
   `description` varchar(200) DEFAULT NULL,
   `cost` double DEFAULT NULL,
   `balance` double DEFAULT '0',
+  `allocatedAmount` double DEFAULT '0',
+  `allocationPercent` double DEFAULT '0',
+  `status` enum('ACTIVE','PURCHASED','CANCELLED') DEFAULT 'ACTIVE',
   `category_id` int DEFAULT NULL,
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`item_id`),
@@ -56,6 +61,33 @@ CREATE TABLE `item` (
   CONSTRAINT `category_id` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`) ON DELETE CASCADE,
   CONSTRAINT `ic_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=57 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+
+--
+-- Table structure for table `activity_log`
+--
+
+DROP TABLE IF EXISTS `activity_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `activity_log` (
+  `activity_log_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `category_id` int DEFAULT NULL,
+  `item_id` int DEFAULT NULL,
+  `type` enum('ITEM_CANCELLED','ALLOCATION_CHANGED') NOT NULL,
+  `message` varchar(500) NOT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`activity_log_id`),
+  KEY `activity_log_user_id_idx` (`user_id`),
+  KEY `activity_log_category_id_idx` (`category_id`),
+  KEY `activity_log_item_id_idx` (`item_id`),
+  CONSTRAINT `activity_log_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `activity_log_category_id` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`) ON DELETE CASCADE,
+  CONSTRAINT `activity_log_item_id` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

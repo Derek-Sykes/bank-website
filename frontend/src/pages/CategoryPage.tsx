@@ -9,7 +9,25 @@ interface Category {
   name: string;
   description: string;
   user_id: number;
-  // any other properties...
+}
+
+interface Item {
+  item_id: number;
+  name: string;
+  description?: string | null;
+  cost?: number | null;
+  balance?: number | null;
+  allocatedAmount?: number | null;
+  allocationPercent?: number | null;
+  category_id: number | null;
+  status?: string | null;
+}
+
+interface ActivityLog {
+  activity_log_id: number;
+  type: string;
+  message: string;
+  created_at: string;
 }
 
 const CategoryPage: React.FC = () => {
@@ -18,17 +36,17 @@ const CategoryPage: React.FC = () => {
   const navigate = useNavigate();
   const auth = useContext(AuthContext);
 
-  // Destructure transfer along with other API functions.
-  const { getItems, createItem, updateItem, deleteItem, transfer } =
+  const { getItems, createItem, updateItem, cancelItem, getActivityLogs } =
     useItemsApi();
 
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   // For the options dropdown on each account
   const [activeOptions, setActiveOptions] = useState<number | null>(null);
 
   // Update modal state
-  const [itemToUpdate, setItemToUpdate] = useState<any | null>(null);
+  const [itemToUpdate, setItemToUpdate] = useState<Item | null>(null);
   const [updateName, setUpdateName] = useState("");
   const [updateCost, setUpdateCost] = useState<number>(0);
   const [updateDescription, setUpdateDescription] = useState("");
@@ -59,15 +77,29 @@ const CategoryPage: React.FC = () => {
     }
   };
 
+  const fetchActivityLogs = async () => {
+    try {
+      const response = await getActivityLogs(category.category_id);
+      if (!response.data?.accessToken) {
+        setActivityLogs(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+    }
+  };
+
   useEffect(() => {
     fetchItems();
+    fetchActivityLogs();
+    // Re-fetch category data only after auth state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.accessToken]);
 
   // Opens the update modal and pre-fills form with current data
-  const openUpdateModal = (item: any) => {
+  const openUpdateModal = (item: Item) => {
     setItemToUpdate(item);
     setUpdateName(item.name);
-    setUpdateCost(item.cost);
+    setUpdateCost(Number(item.cost ?? 0));
     setUpdateDescription(item.description || "");
     setUpdateError("");
     setActiveOptions(null); // Close the options dropdown if open
@@ -83,9 +115,9 @@ const CategoryPage: React.FC = () => {
   const handleSubmitUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (itemToUpdate) {
-      if (updateCost < itemToUpdate.balance) {
+      if (updateCost < Number(itemToUpdate.balance ?? 0)) {
         setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
+          "Cost cannot be lower than balance. Please move money out of this account first.",
         );
         return;
       }
@@ -101,8 +133,8 @@ const CategoryPage: React.FC = () => {
           prev.map((item) =>
             item.item_id === itemToUpdate.item_id
               ? { ...item, ...updatedData }
-              : item
-          )
+              : item,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -151,47 +183,21 @@ const CategoryPage: React.FC = () => {
     }
   };
 
-  // New function: Delete an account with auto-transfer if it has a balance.
-  const handleDeleteAccount = async (account: any) => {
-    // If account has a non-zero balance, automatically transfer its funds to the main account.
-    if (Number(account.balance) > 0) {
-      try {
-        // Get main account by calling getItems with category_id = null.
-        const response = await getItems({ type: "category_id", value: null });
-        if (
-          response &&
-          Array.isArray(response.data) &&
-          response.data.length > 0
-        ) {
-          const mainAccount = response.data[0];
-          // Transfer funds: from the account to be deleted (account.item_id) to the main account.
-          await transfer(account.item_id, mainAccount.item_id, account.balance);
-          console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
-          );
-        } else {
-          console.error("Main account not found. Cannot transfer funds.");
-        }
-      } catch (error) {
-        console.error("Error during transfer:", error);
-        return; // Stop deletion if transfer fails.
-      }
-    }
-    // After transferring funds (if necessary), delete the account.
+  const handleCancelGoal = async (goal: Item) => {
     try {
-      await deleteItem(account.item_id);
-      setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
-      );
+      await cancelItem(goal.item_id);
+      setActiveOptions(null);
+      await fetchItems();
+      await fetchActivityLogs();
     } catch (error) {
-      console.error("Error deleting account:", error);
+      console.error("Error cancelling goal:", error);
     }
   };
 
   if (!auth) return <p>Loading...</p>;
 
-  // Fallback dummy data if no items are fetched.
-  const miniAccounts = items;
+  const activeGoals = items.filter((item) => item.status !== "CANCELLED");
+  const cancelledGoals = items.filter((item) => item.status === "CANCELLED");
 
   return (
     <div style={styles.container}>
@@ -211,15 +217,18 @@ const CategoryPage: React.FC = () => {
 
       <main style={styles.mainContent}>
         {loadingItems ? (
-          <p style={styles.infoText}>Loading accounts...</p>
-        ) : miniAccounts.length > 0 ? (
-          miniAccounts.map((item, index) => (
+          <p style={styles.infoText}>Loading goals...</p>
+        ) : activeGoals.length > 0 ? (
+          activeGoals.map((item, index) => (
             <div key={item.item_id || index} style={styles.accountCard}>
               <div style={styles.accountInfo}>
                 <h3 style={styles.accountName}>{item.name}</h3>
                 <p style={styles.accountDetails}>
-                  Balance: ${item.balance ? item.balance.toFixed(2) : "0"}{" "}
-                  &nbsp;|&nbsp; Cost: ${item.cost ? item.cost.toFixed(2) : "0"}
+                  Allocated: $
+                  {Number(item.allocatedAmount ?? item.balance ?? 0).toFixed(2)}
+                  &nbsp;|&nbsp; Allocation:
+                  {Number(item.allocationPercent ?? 0).toFixed(2)}%
+                  &nbsp;|&nbsp; Cost: ${Number(item.cost ?? 0).toFixed(2)}
                 </p>
                 <p style={styles.accountDescription}>{item.description}</p>
               </div>
@@ -228,7 +237,7 @@ const CategoryPage: React.FC = () => {
                   style={styles.optionsButton}
                   onClick={() =>
                     setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
+                      activeOptions === item.item_id ? null : item.item_id,
                     )
                   }
                 >
@@ -244,12 +253,9 @@ const CategoryPage: React.FC = () => {
                     </button>
                     <button
                       style={styles.dropdownItem}
-                      onClick={() => {
-                        handleDeleteAccount(item);
-                        setActiveOptions(null);
-                      }}
+                      onClick={() => handleCancelGoal(item)}
                     >
-                      Delete
+                      Cancel Goal / Reallocate
                     </button>
                   </div>
                 )}
@@ -257,8 +263,49 @@ const CategoryPage: React.FC = () => {
             </div>
           ))
         ) : (
-          <p style={styles.noData}>No accounts found for this category.</p>
+          <p style={styles.noData}>No active goals found for this category.</p>
         )}
+
+        {cancelledGoals.length > 0 && (
+          <section>
+            <h2 style={styles.sectionTitle}>Cancelled Goals</h2>
+            {cancelledGoals.map((item) => (
+              <div key={item.item_id} style={styles.cancelledCard}>
+                <div style={styles.accountInfo}>
+                  <h3 style={styles.accountName}>{item.name}</h3>
+                  <p style={styles.accountDetails}>
+                    <span style={styles.statusBadge}>Cancelled</span>
+                    &nbsp;|&nbsp; Allocated: $
+                    {Number(item.allocatedAmount ?? 0).toFixed(2)}
+                    &nbsp;|&nbsp; Allocation:
+                    {Number(item.allocationPercent ?? 0).toFixed(2)}%
+                  </p>
+                  <p style={styles.accountDescription}>{item.description}</p>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <section>
+          <h2 style={styles.sectionTitle}>Activity History</h2>
+          {activityLogs.length > 0 ? (
+            <div style={styles.activityList}>
+              {activityLogs.map((activity) => (
+                <div key={activity.activity_log_id} style={styles.activityItem}>
+                  <p style={styles.activityType}>{activity.type}</p>
+                  <p style={styles.accountDescription}>{activity.message}</p>
+                  <p style={styles.activityDate}>
+                    {new Date(activity.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={styles.noData}>No activity recorded for this category.</p>
+          )}
+        </section>
+
         <Link to="/" style={styles.linkButton}>
           Back to Home
         </Link>
@@ -302,7 +349,7 @@ const CategoryPage: React.FC = () => {
                 <label style={styles.label}>Balance:</label>
                 <input
                   type="number"
-                  value={itemToUpdate.balance}
+                  value={Number(itemToUpdate.balance ?? 0)}
                   style={{ ...styles.inputField, backgroundColor: "#f0f0f0" }}
                   readOnly
                 />
@@ -591,6 +638,52 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: "#1976d2",
     color: "#fff",
     transition: "background-color 0.3s ease",
+  },
+  sectionTitle: {
+    fontSize: "24px",
+    fontWeight: 700,
+    margin: "30px 0 15px",
+    color: "#222",
+  },
+  cancelledCard: {
+    backgroundColor: "#fff7f7",
+    padding: "20px",
+    borderRadius: "8px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    border: "1px solid #ffcdd2",
+    marginBottom: "16px",
+  },
+  statusBadge: {
+    backgroundColor: "#d32f2f",
+    color: "#fff",
+    padding: "3px 8px",
+    borderRadius: "999px",
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+  activityList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  activityItem: {
+    backgroundColor: "#f5f8ff",
+    border: "1px solid #dbe7ff",
+    borderRadius: "8px",
+    padding: "14px 16px",
+  },
+  activityType: {
+    fontSize: "14px",
+    color: "#1976d2",
+    fontWeight: 700,
+    margin: "0 0 6px 0",
+  },
+  activityDate: {
+    fontSize: "13px",
+    color: "#888",
+    margin: "8px 0 0 0",
   },
 };
 
