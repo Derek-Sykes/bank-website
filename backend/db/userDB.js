@@ -1,178 +1,152 @@
-import mysql from "mysql2";
-import dotenv from "dotenv";
 import bcrypt from "bcrypt";
-dotenv.config();
+import { prisma } from "../lib/prisma.js";
 
-const pool = mysql
-  .createPool({
-    host: process.env.MYSQL_HOST,
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
-  })
-  .promise();
+function splitDisplayName(displayName) {
+  const [fName = "", ...rest] = (displayName ?? "").split(" ");
+  return { f_name: fName, l_name: rest.join(" ") };
+}
+
+function toLegacyUser(user) {
+  if (!user) return null;
+  const { f_name, l_name } = splitDisplayName(user.displayName);
+
+  return {
+    user_id: user.id,
+    id: user.id,
+    f_name,
+    l_name,
+    displayName: user.displayName,
+    email: user.email,
+    softDeleted: user.softDeleted,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
+function buildDisplayName({ displayName, f_name, l_name }) {
+  return displayName ?? [f_name, l_name].filter(Boolean).join(" ").trim();
+}
 
 // takes in user containing username and password and returns its details if login success otherwise it returns null.
 export async function verifyLogin(user) {
   const { email, password } = user;
-  let [usersdb] = await pool.query(`SELECT * FROM user WHERE email = ?`, [
-    email,
-  ]);
-  usersdb = usersdb[0];
-  // if the email is in db
+  const usersdb = await prisma.user.findFirst({
+    where: { email, softDeleted: false },
+  });
+
   if (usersdb) {
-    // compare passwords
-    let verified = await verifyPassword(password, usersdb.password);
+    const verified = await verifyPassword(password, usersdb.passwordHash);
     if (verified) {
-      let userDetails = {
-        user_id: usersdb.user_id,
-        f_name: usersdb.f_name,
-        l_name: usersdb.l_name,
-        email: usersdb.email,
-      };
-      return userDetails;
+      return toLegacyUser(usersdb);
     }
   }
-  // if its anything if incorrect
+
   return null;
 }
+
 export async function postUser(user) {
-  let { f_name, l_name, email, password } = user;
-  let hash = await hashPassword(password);
+  const { email, password } = user;
+  const displayName = buildDisplayName(user);
+  const hash = await hashPassword(password);
+
   try {
-    await pool.query(
-      `
-        INSERT INTO user (f_name, l_name, email, password)
-        VALUES (?, ?, ?, ?)
-        `,
-      [f_name, l_name, email, hash],
-    );
+    await prisma.user.create({
+      data: {
+        email,
+        passwordHash: hash,
+        displayName,
+        account: {
+          create: {
+            balance: user.initialBalance ?? 5000,
+          },
+        },
+      },
+    });
     console.log("CREATED!!");
     return null;
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      case 1062:
-        console.log("\n\n ERROR: \n", error, "\n\n");
-        console.log("Email already in use");
-        return "Email already in use";
-      // space for more possible error codes from sql
-      default:
-        console.log("Error creating user: ", error);
-        break;
+    if (error.code === "P2002") {
+      console.log("Email already in use");
+      return "Email already in use";
     }
+    console.log("Error creating user: ", error);
+    return error;
   }
 }
 
 export async function updateUser(user, user_id) {
-  let { f_name, l_name, email, password = null } = user;
-  let query;
-  let hash;
-  if (password) {
-    hash = await hashPassword(password);
-    query = `UPDATE user SET f_name = ?, l_name = ?, email = ?, password = ? WHERE user_id = ?`;
+  const { email, password = null } = user;
+  const displayName = buildDisplayName(user);
+  const data = { email, displayName };
 
-    try {
-      await pool.query(query, [f_name, l_name, email, hash, user_id]);
-      return null;
-    } catch (error) {
-      console.log(error);
-      return error;
-    }
-  } else {
-    query = `UPDATE user SET f_name = ?, l_name = ?, email = ? WHERE user_id = ?`;
-    try {
-      await pool.query(query, [f_name, l_name, email, user_id]);
-      return null;
-    } catch (error) {
-      console.log(error);
-      return error;
-    }
+  if (password) {
+    data.passwordHash = await hashPassword(password);
+  }
+
+  try {
+    await prisma.user.update({
+      where: { id: Number(user_id) },
+      data,
+    });
+    return null;
+  } catch (error) {
+    console.log(error);
+    return error;
   }
 }
+
 export async function deleteUser(user, user_id) {
-  if (user.user_id === user_id) {
-    const query = `DELETE FROM user WHERE user_id = ?`;
+  if (Number(user.user_id) === Number(user_id)) {
     try {
-      await pool.query(query, [user_id]);
+      await prisma.user.update({
+        where: { id: Number(user_id) },
+        data: { softDeleted: true, refreshToken: null },
+      });
       return null;
     } catch (error) {
       console.log(error);
       return error;
     }
-  } else {
-    console.log("You can't delete another user");
-    return "ERROR cannot delete another user";
   }
+
+  console.log("You can't delete another user");
+  return "ERROR cannot delete another user";
 }
 
 export async function updateRefreshToken(refreshToken, user_id) {
   try {
-    await pool.query(
-      `
-        UPDATE user SET refresh_token = ? WHERE user_id = ?
-        `,
-      [refreshToken, user_id],
-    );
+    await prisma.user.update({
+      where: { id: Number(user_id) },
+      data: { refreshToken },
+    });
     return null;
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      case 1062:
-        return error;
-      // space for more possible error codes from sql
-      default:
-        //console.log("Error creating user: ", error);
-        return error;
-    }
+    return error;
   }
 }
 
 export async function verifyRefreshToken(refreshToken) {
   try {
-    let user =
-      (
-        await pool.query(
-          `
-        SELECT * FROM user WHERE refresh_token = ?
-        `,
-          [refreshToken],
-        )
-      )[0] || null;
-    return user;
+    if (!refreshToken) return null;
+    const user = await prisma.user.findFirst({
+      where: { refreshToken, softDeleted: false },
+    });
+    return user ? [toLegacyUser(user)] : null;
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      case 1062:
-        console.log(error);
-        return null;
-      // space for more possible error codes from sql
-      default:
-        //console.log("Error creating user: ", error);
-        console.log(error);
-        return null;
-    }
+    console.log(error);
+    return null;
   }
 }
 
 export async function removeRefreshTokenDB(refreshToken) {
   try {
-    await pool.query(
-      `
-        UPDATE user SET refresh_token = NULL WHERE refresh_token = ?;
-        `,
-      [refreshToken],
-    );
+    await prisma.user.updateMany({
+      where: { refreshToken },
+      data: { refreshToken: null },
+    });
+    return null;
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      case 1062:
-        return error;
-      // space for more possible error codes from sql
-      default:
-        //console.log("Error creating user: ", error);
-        return error;
-    }
+    return error;
   }
 }
 
@@ -184,6 +158,7 @@ async function verifyPassword(inputPassword, storedHashedPassword) {
     console.error("Error verifying password:", err);
   }
 }
+
 async function hashPassword(password) {
   const saltRounds = 10;
   try {

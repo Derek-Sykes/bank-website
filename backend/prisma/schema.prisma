@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum ItemStatus {
+  ACTIVE
+  FULLY_FUNDED
+  PURCHASED
+  CANCELLED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique @db.VarChar(191)
+  passwordHash String   @db.VarChar(191)
+  displayName  String   @db.VarChar(191)
+  softDeleted  Boolean  @default(false)
+  refreshToken String?  @db.VarChar(512)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  account       Account?
+  categories    Category[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+
+  @@index([softDeleted])
+}
+
+model Account {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  balance   Decimal  @default(0.00) @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  name               String   @db.VarChar(191)
+  description        String?  @db.VarChar(500)
+  allocationPercent  Decimal  @default(0.00) @db.Decimal(5, 2)
+  unallocatedBalance Decimal  @default(0.00) @db.Decimal(18, 2)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        Item[]
+  activityLogs ActivityLog[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Item {
+  id                Int        @id @default(autoincrement())
+  categoryId        Int
+  name              String     @db.VarChar(191)
+  description       String?    @db.VarChar(500)
+  targetAmount      Decimal    @default(0.00) @db.Decimal(18, 2)
+  allocatedAmount   Decimal    @default(0.00) @db.Decimal(18, 2)
+  allocationPercent Decimal    @default(0.00) @db.Decimal(5, 2)
+  status            ItemStatus @default(ACTIVE)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  activityLogs ActivityLog[]
+
+  @@index([categoryId])
+}
+
+model ActivityLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  categoryId Int?
+  itemId     Int?
+  type       String   @db.VarChar(100)
+  amount     Decimal  @default(0.00) @db.Decimal(18, 2)
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  item     Item?     @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([itemId])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String   @db.VarChar(100)
+  payload   Json?
+  readFlag  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readFlag])
+}

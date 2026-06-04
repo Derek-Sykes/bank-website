@@ -1,55 +1,121 @@
-import mysql from "mysql2";
-import dotenv from "dotenv";
-dotenv.config();
+import { Prisma } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
 
-const pool = mysql
-  .createPool({
-    host: process.env.MYSQL_HOST,
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
-  })
-  .promise();
+const ACCOUNT_ITEM_ID_MULTIPLIER = -1;
+
+function toNumber(value) {
+  if (value === null || value === undefined) return value;
+  return Number(value);
+}
+
+function accountItemId(accountId) {
+  return Number(accountId) * ACCOUNT_ITEM_ID_MULTIPLIER;
+}
+
+function parseItemLikeId(id) {
+  const numericId = Number(id);
+  return numericId < 0
+    ? { kind: "account", id: Math.abs(numericId) }
+    : { kind: "item", id: numericId };
+}
+
+function toLegacyItem(item) {
+  if (!item) return null;
+  return {
+    item_id: item.id,
+    id: item.id,
+    category_id: item.categoryId,
+    categoryId: item.categoryId,
+    user_id: item.category?.userId,
+    userId: item.category?.userId,
+    name: item.name,
+    description: item.description,
+    cost: toNumber(item.targetAmount),
+    balance: toNumber(item.allocatedAmount),
+    targetAmount: toNumber(item.targetAmount),
+    allocatedAmount: toNumber(item.allocatedAmount),
+    allocationPercent: toNumber(item.allocationPercent),
+    status: item.status,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+}
+
+function toLegacyMainAccount(account) {
+  if (!account) return null;
+  return {
+    item_id: accountItemId(account.id),
+    id: account.id,
+    accountId: account.id,
+    category_id: null,
+    categoryId: null,
+    user_id: account.userId,
+    userId: account.userId,
+    name: "Main Account",
+    description: "Main Account",
+    cost: null,
+    balance: toNumber(account.balance),
+    targetAmount: null,
+    allocatedAmount: toNumber(account.balance),
+    allocationPercent: null,
+    status: "ACTIVE",
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+  };
+}
 
 export async function postItem(item) {
-  let {
+  const {
     name,
     description = null,
     cost = null,
-    balance = null,
+    balance = 0,
+    targetAmount = cost,
+    allocatedAmount = balance,
+    allocationPercent = 0,
+    status = "ACTIVE",
     category_id = null,
+    categoryId = category_id,
     user_id = null,
   } = item;
   console.log(
     "ITEM spelled out: ",
     name,
     description,
-    cost,
-    balance,
-    category_id,
+    targetAmount,
+    allocatedAmount,
+    categoryId,
     user_id,
   );
+
   try {
-    await pool.query(
-      `
-            INSERT INTO item (name, description, cost, balance, category_id, user_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-            `,
-      [name, description, cost, balance, category_id, user_id],
-    );
+    if (categoryId === null || categoryId === undefined) {
+      await prisma.account.upsert({
+        where: { userId: Number(user_id) },
+        update: { balance: allocatedAmount ?? 0 },
+        create: { userId: Number(user_id), balance: allocatedAmount ?? 0 },
+      });
+      return 1;
+    }
+
+    await prisma.item.create({
+      data: {
+        name,
+        description,
+        targetAmount: targetAmount ?? 0,
+        allocatedAmount: allocatedAmount ?? 0,
+        allocationPercent,
+        status,
+        categoryId: Number(categoryId),
+      },
+    });
     return 1;
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      case 1048:
-        console.log("Name must have a value");
-        return "Name must have a value";
-      // space for more possible error codes from sql
-      default:
-        console.log("Error creating item: ", error);
-        break;
+    if (error.code === "P2011") {
+      console.log("Name must have a value");
+      return "Name must have a value";
     }
-    console.log(error);
+    console.log("Error creating item: ", error);
     return error;
   }
 }
@@ -60,54 +126,73 @@ export async function getItemBy(user_id, type, value) {
 
   const allowedColumns = [
     "item_id",
+    "id",
     "name",
     "description",
     "cost",
+    "targetAmount",
     "balance",
+    "allocatedAmount",
     "category_id",
+    "categoryId",
     "user_id",
+    "userId",
+    "status",
   ];
   if (type && !allowedColumns.includes(type)) {
     throw new Error(`Invalid column name provided. type: ${type} not allowed`);
   }
-  const query = `SELECT * FROM item WHERE ${type} = ? AND user_id = ?`;
-  const nullValueQuery = `SELECT * FROM item WHERE ${type} iS NULL AND user_id = ?`;
-  const nullUserQuery = `SELECT * FROM item WHERE ${type} = ?`;
-  const nullTypeQuery = `SELECT * FROM item WHERE user_id = ?`;
-  const nullQuery = `SELECT * FROM item`;
+
   try {
-    if (!type && !user_id) {
-      let items = (await pool.query(nullQuery))[0];
-      console.log("items: ", items);
-      return items;
-    } else if (!user_id) {
-      let items = (await pool.query(nullUserQuery, [value]))[0];
-      console.log("items: ", items);
-      return items;
-    } else if (type && !value) {
-      let items = (await pool.query(nullValueQuery, [user_id]))[0];
-      console.log("items: ", items);
-      return items;
-    } else if (!type) {
-      let items = (await pool.query(nullTypeQuery, [user_id]))[0];
-      console.log("items: ", items);
-      return items;
+    if (type === "category_id" && value === null && user_id) {
+      const account = await prisma.account.findUnique({
+        where: { userId: Number(user_id) },
+      });
+      return account ? [toLegacyMainAccount(account)] : [];
     }
-    let items = (await pool.query(query, [value, user_id]))[0];
+
+    const where = {};
+    if (user_id) {
+      where.category = { userId: Number(user_id) };
+    }
+
+    if (type && value !== null) {
+      switch (type) {
+        case "item_id":
+        case "id":
+          where.id = Number(value);
+          break;
+        case "category_id":
+        case "categoryId":
+          where.categoryId = Number(value);
+          break;
+        case "user_id":
+        case "userId":
+          where.category = { userId: Number(value) };
+          break;
+        case "cost":
+        case "targetAmount":
+          where.targetAmount = new Prisma.Decimal(value);
+          break;
+        case "balance":
+        case "allocatedAmount":
+          where.allocatedAmount = new Prisma.Decimal(value);
+          break;
+        default:
+          where[type] = value;
+      }
+    }
+
+    const items = await prisma.item.findMany({
+      where,
+      include: { category: true },
+      orderBy: { createdAt: "asc" },
+    });
     console.log("items: ", items);
-    return items;
+    return items.map(toLegacyItem);
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      // placeholder
-      case 1048:
-        console.log("error of 1048 means: ", error);
-        return null;
-      // space for more possible error codes from sql
-      default:
-        console.log("Error getting item: ", error);
-        return null;
-    }
+    console.log("Error getting item: ", error);
+    return null;
   }
 }
 
@@ -120,28 +205,50 @@ export async function updateItem(
   category_id,
   user_id,
 ) {
-  const query = `UPDATE item SET name = ?, description = ?, cost = ?, balance = ?, category_id =? WHERE item_id = ? && user_id = ?`;
+  const parsedId = parseItemLikeId(item_id);
 
   try {
-    await pool.query(query, [
+    if (parsedId.kind === "account") {
+      await prisma.account.updateMany({
+        where: { id: parsedId.id, userId: Number(user_id) },
+        data: { balance: balance ?? 0 },
+      });
+      return null;
+    }
+
+    const data = {
       name,
       description,
-      cost,
-      balance,
-      category_id,
-      item_id,
-      user_id,
-    ]);
+      targetAmount: cost ?? 0,
+      allocatedAmount: balance ?? 0,
+    };
+
+    if (category_id !== null && category_id !== undefined) {
+      data.categoryId = Number(category_id);
+    }
+
+    await prisma.item.updateMany({
+      where: { id: parsedId.id, category: { userId: Number(user_id) } },
+      data,
+    });
     return null;
   } catch (error) {
     console.log(error);
     return error;
   }
 }
+
 export async function deleteItem(item_id, user_id) {
-  const query = `DELETE FROM item WHERE item_id = ? && user_id = ?`;
+  const parsedId = parseItemLikeId(item_id);
+
+  if (parsedId.kind === "account") {
+    return "Main Account cannot be deleted";
+  }
+
   try {
-    await pool.query(query, [item_id, user_id]);
+    await prisma.item.deleteMany({
+      where: { id: parsedId.id, category: { userId: Number(user_id) } },
+    });
     return null;
   } catch (error) {
     console.log(error);
@@ -150,38 +257,33 @@ export async function deleteItem(item_id, user_id) {
 }
 
 export async function transfer(item_id1, item_id2, amount, user_id) {
-  // Using parameter placeholders for all values makes the query secure against SQL injection.
-  const query = `
-    UPDATE bank_app.item
-    SET balance = CASE
-      WHEN item_id = ? THEN balance - ?
-      WHEN item_id = ? THEN balance + ?
-      ELSE balance
-    END
-    WHERE item_id IN (?, ?) AND user_id = ?;
-  `;
+  const from = parseItemLikeId(item_id1);
+  const to = parseItemLikeId(item_id2);
+  const transferAmount = new Prisma.Decimal(amount ?? 0);
 
   try {
-    // Order of parameters:
-    // 1. item_id1 (for subtracting money)
-    // 2. amount (the transfer amount to subtract)
-    // 3. item_id2 (for adding money)
-    // 4. amount (the same transfer amount to add)
-    // 5. item_id1 (first account in the WHERE clause)
-    // 6. item_id2 (second account in the WHERE clause)
-    // 7. user_id (ensuring both accounts belong to this user)
-    await pool.query(query, [
-      item_id1,
-      amount,
-      item_id2,
-      amount,
-      item_id1,
-      item_id2,
-      user_id,
-    ]);
+    await prisma.$transaction(async (tx) => {
+      await adjustBalance(tx, from, user_id, transferAmount.negated());
+      await adjustBalance(tx, to, user_id, transferAmount);
+    });
     return null;
   } catch (error) {
     console.log(error);
     return error;
   }
+}
+
+async function adjustBalance(tx, target, user_id, amountDelta) {
+  if (target.kind === "account") {
+    await tx.account.updateMany({
+      where: { id: target.id, userId: Number(user_id) },
+      data: { balance: { increment: amountDelta } },
+    });
+    return;
+  }
+
+  await tx.item.updateMany({
+    where: { id: target.id, category: { userId: Number(user_id) } },
+    data: { allocatedAmount: { increment: amountDelta } },
+  });
 }
