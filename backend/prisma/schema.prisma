@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  user_id       Int       @id @default(autoincrement())
+  f_name        String
+  l_name        String
+  email         String    @unique
+  password      String
+  refresh_token String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  accounts       Account[]
+  categories     Category[]
+  items          Item[]
+  activityLogs   ActivityLog[]
+  notifications  Notification[]
+  sessions       Session[]
+  passwordResets PasswordReset[]
+
+  @@map("user")
+}
+
+model Account {
+  account_id  Int      @id @default(autoincrement())
+  name        String
+  description String?
+  balance     Float    @default(0)
+  user_id     Int
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user         User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  items        Item[]
+  activityLogs ActivityLog[]
+
+  @@map("account")
+}
+
+model Category {
+  category_id Int      @id @default(autoincrement())
+  name        String
+  description String?
+  user_id     Int
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user  User   @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  items Item[]
+
+  @@map("category")
+}
+
+model Item {
+  item_id     Int      @id @default(autoincrement())
+  name        String
+  description String?
+  cost        Float?
+  balance     Float    @default(0)
+  category_id Int?
+  account_id  Int?
+  user_id     Int
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user     User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  category Category? @relation(fields: [category_id], references: [category_id], onDelete: SetNull)
+  account  Account?  @relation(fields: [account_id], references: [account_id], onDelete: SetNull)
+
+  @@map("item")
+}
+
+model ActivityLog {
+  activity_log_id Int      @id @default(autoincrement())
+  action          String
+  entity_type     String
+  entity_id       Int?
+  metadata        Json?
+  user_id         Int
+  account_id      Int?
+  created_at      DateTime @default(now())
+
+  user    User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  account Account? @relation(fields: [account_id], references: [account_id], onDelete: SetNull)
+
+  @@map("activity_log")
+}
+
+model Notification {
+  notification_id Int      @id @default(autoincrement())
+  title           String
+  message         String
+  read            Boolean  @default(false)
+  user_id         Int
+  created_at      DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("notification")
+}
+
+model Session {
+  session_id    Int      @id @default(autoincrement())
+  refresh_token String   @unique
+  user_id       Int
+  expires_at    DateTime
+  created_at    DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model PasswordReset {
+  password_reset_id Int      @id @default(autoincrement())
+  token             String   @unique
+  user_id           Int
+  expires_at        DateTime
+  used              Boolean  @default(false)
+  created_at        DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("password_reset")
+}
