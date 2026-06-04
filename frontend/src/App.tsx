@@ -6,6 +6,7 @@ import HomePage from "./pages/Home";
 import AboutPage from "./pages/About";
 import CategoryPage from "./pages/CategoryPage";
 import AccountsPage from "./pages/AccountsPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const App = () => {
   const auth = useContext(AuthContext);
@@ -36,6 +37,10 @@ const App = () => {
       <Route
         path="/accounts"
         element={auth?.user ? <AccountsPage /> : <Navigate to="/auth" />}
+      />
+      <Route
+        path="/settings"
+        element={auth?.user ? <SettingsPage /> : <Navigate to="/auth" />}
       />
       <Route
         path="*"

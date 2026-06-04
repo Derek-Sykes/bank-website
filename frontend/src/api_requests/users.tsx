@@ -14,7 +14,7 @@ export const registerUser = async (
   email: string,
   password: string,
   f_name: string,
-  l_name: string
+  l_name: string,
 ) => {
   return api.post("/users/register", {
     user: { email, password, f_name, l_name },
@@ -37,3 +37,34 @@ export const getUserSession = async () => {
 };
 
 export default api;
+
+export const useAccountApi = (accessToken?: string | null) => {
+  const buildHeaders = () => {
+    const headers: Record<string, string> = {};
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return headers;
+  };
+
+  const getAccount = async () =>
+    api.get("/account", { headers: buildHeaders() });
+
+  const updateAccount = async (profileData: {
+    f_name: string;
+    l_name: string;
+  }) => api.patch("/account", profileData, { headers: buildHeaders() });
+
+  const changePassword = async (passwordData: {
+    currentPassword: string;
+    newPassword: string;
+  }) =>
+    api.post("/account/change-password", passwordData, {
+      headers: buildHeaders(),
+    });
+
+  const softDeleteAccount = async () =>
+    api.post("/account/soft-delete", {}, { headers: buildHeaders() });
+
+  return { getAccount, updateAccount, changePassword, softDeleteAccount };
+};

@@ -20,6 +20,9 @@ export async function verifyLogin(user) {
   ]);
   usersdb = usersdb[0];
   // if the email is in db
+  if (usersdb && usersdb.softDeleted) {
+    return null;
+  }
   if (usersdb) {
     // compare passwords
     let verified = await verifyPassword(password, usersdb.password);
@@ -92,14 +95,7 @@ export async function updateUser(user, user_id) {
 }
 export async function deleteUser(user, user_id) {
   if (user.user_id === user_id) {
-    const query = `DELETE FROM user WHERE user_id = ?`;
-    try {
-      await pool.query(query, [user_id]);
-      return null;
-    } catch (error) {
-      console.log(error);
-      return error;
-    }
+    return await softDeleteUser(user_id);
   } else {
     console.log("You can't delete another user");
     return "ERROR cannot delete another user";
@@ -110,7 +106,7 @@ export async function updateRefreshToken(refreshToken, user_id) {
   try {
     await pool.query(
       `
-        UPDATE user SET refresh_token = ? WHERE user_id = ?
+        UPDATE user SET refresh_token = ? WHERE user_id = ? AND softDeleted = false
         `,
       [refreshToken, user_id],
     );
@@ -134,7 +130,7 @@ export async function verifyRefreshToken(refreshToken) {
       (
         await pool.query(
           `
-        SELECT * FROM user WHERE refresh_token = ?
+        SELECT * FROM user WHERE refresh_token = ? AND softDeleted = false
         `,
           [refreshToken],
         )
@@ -173,6 +169,87 @@ export async function removeRefreshTokenDB(refreshToken) {
         //console.log("Error creating user: ", error);
         return error;
     }
+  }
+}
+
+export async function getUserById(user_id) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT user_id, f_name, l_name, email, password, refresh_token, softDeleted FROM user WHERE user_id = ?`,
+      [user_id],
+    );
+    return rows[0] || null;
+  } catch (error) {
+    console.log(error);
+    return null;
+  }
+}
+
+export async function updateAccountProfile(user_id, user) {
+  const { f_name, l_name } = user;
+  try {
+    await pool.query(
+      `UPDATE user SET f_name = ?, l_name = ? WHERE user_id = ? AND softDeleted = false`,
+      [f_name, l_name, user_id],
+    );
+    return await getUserById(user_id);
+  } catch (error) {
+    console.log(error);
+    return null;
+  }
+}
+
+export async function changeUserPassword(
+  user_id,
+  currentPassword,
+  newPassword,
+) {
+  const user = await getUserById(user_id);
+  if (!user || user.softDeleted) {
+    return "INVALID_CURRENT_PASSWORD";
+  }
+
+  const verified = await verifyPassword(currentPassword, user.password);
+  if (!verified) {
+    return "INVALID_CURRENT_PASSWORD";
+  }
+
+  const hash = await hashPassword(newPassword);
+  try {
+    await pool.query(`UPDATE user SET password = ? WHERE user_id = ?`, [
+      hash,
+      user_id,
+    ]);
+    return null;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+}
+
+export async function softDeleteUser(user_id) {
+  try {
+    await pool.query(
+      `UPDATE user SET softDeleted = true, refresh_token = NULL WHERE user_id = ?`,
+      [user_id],
+    );
+    return null;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+}
+
+export async function logUserEvent(user_id, event_type) {
+  try {
+    await pool.query(
+      `INSERT INTO user_audit_log (user_id, event_type) VALUES (?, ?)`,
+      [user_id, event_type],
+    );
+    return null;
+  } catch (error) {
+    console.log("Unable to write audit log:", error);
+    return error;
   }
 }
 
