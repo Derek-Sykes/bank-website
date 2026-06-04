@@ -15,6 +15,7 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+
 --
 -- Table structure for table `category`
 --
@@ -26,6 +27,7 @@ CREATE TABLE `category` (
   `category_id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(45) NOT NULL,
   `description` varchar(200) DEFAULT NULL,
+  `allocation_percent` double NOT NULL DEFAULT '0',
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`category_id`),
   UNIQUE KEY `category_id_UNIQUE` (`category_id`),
@@ -47,6 +49,8 @@ CREATE TABLE `item` (
   `description` varchar(200) DEFAULT NULL,
   `cost` double DEFAULT NULL,
   `balance` double DEFAULT '0',
+  `allocation_percent` double NOT NULL DEFAULT '0',
+  `status` varchar(20) NOT NULL DEFAULT 'ACTIVE',
   `category_id` int DEFAULT NULL,
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`item_id`),
@@ -76,6 +80,50 @@ CREATE TABLE `user` (
   UNIQUE KEY `email_UNIQUE` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `activity`
+--
+
+DROP TABLE IF EXISTS `activity`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `activity` (
+  `activity_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `item_id` int DEFAULT NULL,
+  `type` varchar(40) NOT NULL,
+  `amount` double DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`activity_id`),
+  KEY `activity_user_id_idx` (`user_id`),
+  KEY `activity_item_id_idx` (`item_id`),
+  CONSTRAINT `activity_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `activity_item_id` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `notification`
+--
+
+DROP TABLE IF EXISTS `notification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notification` (
+  `notification_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `code` varchar(80) NOT NULL,
+  `message` varchar(255) NOT NULL,
+  `read_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`notification_id`),
+  KEY `notification_user_id_idx` (`user_id`),
+  CONSTRAINT `notification_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
