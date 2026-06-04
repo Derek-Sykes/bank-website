@@ -18,6 +18,8 @@ export async function postItem(item) {
     cost = null,
     balance = null,
     category_id = null,
+    allocation_percentage = 0,
+    status = "ACTIVE",
     user_id = null,
   } = item;
   console.log(
@@ -32,10 +34,19 @@ export async function postItem(item) {
   try {
     await pool.query(
       `
-            INSERT INTO item (name, description, cost, balance, category_id, user_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO item (name, description, cost, balance, category_id, allocation_percentage, status, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `,
-      [name, description, cost, balance, category_id, user_id],
+      [
+        name,
+        description,
+        cost,
+        balance,
+        category_id,
+        allocation_percentage,
+        status,
+        user_id,
+      ],
     );
     return 1;
   } catch (error) {
@@ -66,6 +77,8 @@ export async function getItemBy(user_id, type, value) {
     "balance",
     "category_id",
     "user_id",
+    "allocation_percentage",
+    "status",
   ];
   if (type && !allowedColumns.includes(type)) {
     throw new Error(`Invalid column name provided. type: ${type} not allowed`);
@@ -119,8 +132,10 @@ export async function updateItem(
   balance,
   category_id,
   user_id,
+  allocation_percentage = null,
+  status = null,
 ) {
-  const query = `UPDATE item SET name = ?, description = ?, cost = ?, balance = ?, category_id =? WHERE item_id = ? && user_id = ?`;
+  const query = `UPDATE item SET name = ?, description = ?, cost = ?, balance = ?, category_id = ?, allocation_percentage = COALESCE(?, allocation_percentage), status = COALESCE(?, status) WHERE item_id = ? && user_id = ?`;
 
   try {
     await pool.query(query, [
@@ -129,6 +144,8 @@ export async function updateItem(
       cost,
       balance,
       category_id,
+      allocation_percentage,
+      status,
       item_id,
       user_id,
     ]);
@@ -150,38 +167,64 @@ export async function deleteItem(item_id, user_id) {
 }
 
 export async function transfer(item_id1, item_id2, amount, user_id) {
-  // Using parameter placeholders for all values makes the query secure against SQL injection.
-  const query = `
-    UPDATE bank_app.item
-    SET balance = CASE
-      WHEN item_id = ? THEN balance - ?
-      WHEN item_id = ? THEN balance + ?
-      ELSE balance
-    END
-    WHERE item_id IN (?, ?) AND user_id = ?;
-  `;
+  const transferAmount = Number(amount);
+
+  if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+    return new Error("Transfer amount must be greater than 0.");
+  }
+
+  const connection = await pool.getConnection();
 
   try {
-    // Order of parameters:
-    // 1. item_id1 (for subtracting money)
-    // 2. amount (the transfer amount to subtract)
-    // 3. item_id2 (for adding money)
-    // 4. amount (the same transfer amount to add)
-    // 5. item_id1 (first account in the WHERE clause)
-    // 6. item_id2 (second account in the WHERE clause)
-    // 7. user_id (ensuring both accounts belong to this user)
-    await pool.query(query, [
-      item_id1,
-      amount,
-      item_id2,
-      amount,
-      item_id1,
-      item_id2,
-      user_id,
-    ]);
+    await connection.beginTransaction();
+
+    const [sourceRows] = await connection.query(
+      "SELECT balance FROM item WHERE item_id = ? AND user_id = ? FOR UPDATE",
+      [item_id1, user_id],
+    );
+
+    if (sourceRows.length === 0) {
+      throw new Error("Source account not found.");
+    }
+
+    if (Number(sourceRows[0].balance) < transferAmount) {
+      throw new Error("Transfer would make the source balance negative.");
+    }
+
+    const [result] = await connection.query(
+      `
+        UPDATE item
+        SET balance = CASE
+          WHEN item_id = ? THEN balance - ?
+          WHEN item_id = ? THEN balance + ?
+          ELSE balance
+        END
+        WHERE item_id IN (?, ?) AND user_id = ?
+      `,
+      [
+        item_id1,
+        transferAmount,
+        item_id2,
+        transferAmount,
+        item_id1,
+        item_id2,
+        user_id,
+      ],
+    );
+
+    if (result.affectedRows !== 2) {
+      throw new Error(
+        "Both transfer accounts must exist and belong to the user.",
+      );
+    }
+
+    await connection.commit();
     return null;
   } catch (error) {
+    await connection.rollback();
     console.log(error);
     return error;
+  } finally {
+    connection.release();
   }
 }

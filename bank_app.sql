@@ -26,12 +26,58 @@ CREATE TABLE `category` (
   `category_id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(45) NOT NULL,
   `description` varchar(200) DEFAULT NULL,
+  `allocation_percentage` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `unallocated_balance` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `total_balance` decimal(12,2) NOT NULL DEFAULT '0.00',
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`category_id`),
   UNIQUE KEY `category_id_UNIQUE` (`category_id`),
   KEY `user_id_idx` (`user_id`),
   CONSTRAINT `fc_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `activity_log`
+--
+
+DROP TABLE IF EXISTS `activity_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `activity_log` (
+  `activity_log_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `activity_type` enum('MONEY_ADDED','AUTO_ALLOCATED','FULLY_FUNDED_REACHED') NOT NULL,
+  `amount` decimal(12,2) DEFAULT NULL,
+  `note` varchar(255) DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`activity_log_id`),
+  KEY `activity_log_user_id_idx` (`user_id`),
+  CONSTRAINT `activity_log_user_id_fk` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `notification`
+--
+
+DROP TABLE IF EXISTS `notification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notification` (
+  `notification_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `type` enum('MONEY_ADDED','AUTO_ALLOCATED','FULLY_FUNDED_REACHED') NOT NULL,
+  `title` varchar(120) NOT NULL,
+  `message` varchar(255) NOT NULL,
+  `metadata` json DEFAULT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notification_id`),
+  KEY `notification_user_id_idx` (`user_id`),
+  CONSTRAINT `notification_user_id_fk` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -47,6 +93,8 @@ CREATE TABLE `item` (
   `description` varchar(200) DEFAULT NULL,
   `cost` double DEFAULT NULL,
   `balance` double DEFAULT '0',
+  `allocation_percentage` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `status` enum('ACTIVE','FULLY_FUNDED','PURCHASED','CANCELLED') NOT NULL DEFAULT 'ACTIVE',
   `category_id` int DEFAULT NULL,
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`item_id`),
