@@ -31,3 +31,9 @@ build/
 # Miscellaneous
 .DS_Store
 *.tgz
+
+# Prisma local SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
