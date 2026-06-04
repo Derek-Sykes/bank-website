@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  user_id       Int            @id @default(autoincrement())
+  f_name        String?        @db.VarChar(45)
+  l_name        String?        @db.VarChar(45)
+  email         String         @unique(map: "email_UNIQUE") @db.VarChar(90)
+  password      String         @db.VarChar(60)
+  refresh_token String?        @db.VarChar(255)
+  categories    Category[]
+  items         Item[]
+  notifications Notification[]
+
+  @@map("user")
+}
+
+model Category {
+  category_id Int     @id @default(autoincrement())
+  name        String  @db.VarChar(45)
+  description String? @db.VarChar(200)
+  user_id     Int?
+  user        User?   @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fc_user_id")
+  items       Item[]
+
+  @@index([user_id], map: "user_id_idx")
+  @@map("category")
+}
+
+model Item {
+  item_id     Int       @id @default(autoincrement())
+  name        String    @db.VarChar(45)
+  description String?   @db.VarChar(200)
+  cost        Float?
+  balance     Float?    @default(0)
+  category_id Int?
+  user_id     Int?
+  category    Category? @relation(fields: [category_id], references: [category_id], onDelete: Cascade, map: "category_id")
+  user        User?     @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "ic_user_id")
+
+  @@index([category_id], map: "category_id_idx")
+  @@index([user_id], map: "user_id_idx")
+  @@map("item")
+}
+
+model Notification {
+  notification_id Int       @id @default(autoincrement())
+  user_id         Int
+  source          String    @default("system") @db.VarChar(45)
+  type            String    @db.VarChar(80)
+  title           String    @db.VarChar(120)
+  message         String    @db.VarChar(500)
+  metadata        Json?
+  is_read         Boolean   @default(false)
+  read_at         DateTime?
+  created_at      DateTime  @default(now())
+  user            User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "notification_user_id")
+
+  @@index([user_id], map: "notification_user_id_idx")
+  @@index([user_id, is_read, created_at], map: "notification_user_read_created_idx")
+  @@map("notification")
+}

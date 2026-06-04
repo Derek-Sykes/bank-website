@@ -5,6 +5,9 @@ import { capitalize } from "../utils/generalUtils";
 import { useCategoryApi } from "../api_requests/category";
 import { useItemsApi } from "../api_requests/items";
 import TransferFunds from "../components/TransferFunds"; // Ensure correct path
+import NotificationsPanel from "../components/NotificationsPanel";
+import { useNotificationsApi } from "../api_requests/notifications";
+import type { Notification } from "../api_requests/notifications";
 
 type ConfirmDelete = {
   category_id: number;
@@ -18,9 +21,19 @@ const HomePage: React.FC = () => {
   const { getCategories, createCategory, updateCategory, deleteCategory } =
     useCategoryApi();
   const { getItems } = useItemsApi();
+  const {
+    getNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    deleteNotification,
+    deleteAllNotifications,
+  } = useNotificationsApi();
 
   const [categories, setCategories] = useState<any[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   // State for the Main Account view
   const [mainAccount, setMainAccount] = useState<any>(null);
@@ -31,7 +44,7 @@ const HomePage: React.FC = () => {
 
   // State to hold the sum of balances for each category
   const [categorySums, setCategorySums] = useState<{ [key: number]: number }>(
-    {}
+    {},
   );
 
   // Options dropdown state for each category card
@@ -54,8 +67,22 @@ const HomePage: React.FC = () => {
 
   // Delete confirmation popup state
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(
-    null
+    null,
   );
+
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const response = await getNotifications();
+      if (Array.isArray(response.data)) {
+        setNotifications(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
 
   const fetchCategories = async () => {
     setLoadingCategories(true);
@@ -107,6 +134,7 @@ const HomePage: React.FC = () => {
     fetchCategories();
     fetchMainAccount();
     fetchAllAccounts();
+    fetchNotifications();
   }, [auth?.accessToken]);
 
   // Compute category sums from the allAccounts array without making multiple API calls
@@ -115,11 +143,11 @@ const HomePage: React.FC = () => {
     categories.forEach((cat: any) => {
       // Assume each account has a property category_id
       const accountsForCat = allAccounts.filter(
-        (acc) => acc.category_id === cat.category_id
+        (acc) => acc.category_id === cat.category_id,
       );
       const sum = accountsForCat.reduce(
         (accum, account) => accum + Number(account.balance),
-        0
+        0,
       );
       sums[cat.category_id] = sum;
     });
@@ -159,8 +187,8 @@ const HomePage: React.FC = () => {
           prev.map((cat) =>
             cat.category_id === categoryToUpdate.category_id
               ? { ...cat, ...updatedData }
-              : cat
-          )
+              : cat,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -206,12 +234,12 @@ const HomePage: React.FC = () => {
   // Delete a category directly if no accounts exist
   const handleDeleteCategory = async (
     category_id: string | number,
-    options?: any
+    options?: any,
   ) => {
     try {
       await deleteCategory(category_id, options);
       setCategories((prev) =>
-        prev.filter((cat) => cat.category_id !== category_id)
+        prev.filter((cat) => cat.category_id !== category_id),
       );
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -252,6 +280,67 @@ const HomePage: React.FC = () => {
     }
   };
 
+  const unreadNotificationCount = notifications.filter(
+    (notification) => !notification.is_read,
+  ).length;
+
+  const handleMarkNotificationRead = async (notification_id: number) => {
+    try {
+      await markNotificationRead(notification_id);
+      setNotifications((prev) =>
+        prev.map((notification) =>
+          notification.notification_id === notification_id
+            ? {
+                ...notification,
+                is_read: true,
+                read_at: notification.read_at || new Date().toISOString(),
+              }
+            : notification,
+        ),
+      );
+    } catch (error) {
+      console.error("Error marking notification read:", error);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      const readAt = new Date().toISOString();
+      setNotifications((prev) =>
+        prev.map((notification) => ({
+          ...notification,
+          is_read: true,
+          read_at: notification.read_at || readAt,
+        })),
+      );
+    } catch (error) {
+      console.error("Error marking notifications read:", error);
+    }
+  };
+
+  const handleDeleteNotification = async (notification_id: number) => {
+    try {
+      await deleteNotification(notification_id);
+      setNotifications((prev) =>
+        prev.filter(
+          (notification) => notification.notification_id !== notification_id,
+        ),
+      );
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    try {
+      await deleteAllNotifications();
+      setNotifications([]);
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+    }
+  };
+
   if (!auth) return <p>Loading...</p>;
 
   return (
@@ -259,20 +348,32 @@ const HomePage: React.FC = () => {
       {/* Header */}
       <header style={styles.header}>
         <h1 style={styles.title}>BudgetWise</h1>
-        <nav>
-          <ul style={styles.navList}>
-            <li style={styles.navItem}>
-              <Link to="/about" style={styles.navLink}>
-                About
-              </Link>
-            </li>
-            <li style={styles.navItem}>
-              <button onClick={auth.logout} style={styles.navButton}>
-                Logout
-              </button>
-            </li>
-          </ul>
-        </nav>
+        <div style={styles.headerActions}>
+          <button
+            style={styles.notificationButton}
+            onClick={() => setIsNotificationsOpen(true)}
+            aria-label={`Open notifications. ${unreadNotificationCount} unread`}
+          >
+            <span style={styles.envelopeIcon}>✉</span>
+            {unreadNotificationCount > 0 && (
+              <span style={styles.unreadBadge}>{unreadNotificationCount}</span>
+            )}
+          </button>
+          <nav>
+            <ul style={styles.navList}>
+              <li style={styles.navItem}>
+                <Link to="/about" style={styles.navLink}>
+                  About
+                </Link>
+              </li>
+              <li style={styles.navItem}>
+                <button onClick={auth.logout} style={styles.navButton}>
+                  Logout
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -354,7 +455,7 @@ const HomePage: React.FC = () => {
                       setActiveOptions(
                         activeOptions === cat.category_id
                           ? null
-                          : cat.category_id
+                          : cat.category_id,
                       )
                     }
                   >
@@ -384,6 +485,17 @@ const HomePage: React.FC = () => {
           )}
         </section>
       </main>
+
+      <NotificationsPanel
+        notifications={notifications}
+        isOpen={isNotificationsOpen}
+        loading={loadingNotifications}
+        onClose={() => setIsNotificationsOpen(false)}
+        onMarkRead={handleMarkNotificationRead}
+        onMarkAllRead={handleMarkAllNotificationsRead}
+        onDelete={handleDeleteNotification}
+        onClearAll={handleClearNotifications}
+      />
 
       {/* Transfer Funds Modal */}
       {isTransferModalOpen && (
@@ -542,6 +654,44 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
     color: "#222",
     margin: 0,
+  },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "20px",
+  },
+  notificationButton: {
+    position: "relative",
+    border: "1px solid #dbeafe",
+    backgroundColor: "#eff6ff",
+    color: "#1976d2",
+    width: "42px",
+    height: "42px",
+    borderRadius: "50%",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "20px",
+  },
+  envelopeIcon: {
+    lineHeight: 1,
+  },
+  unreadBadge: {
+    position: "absolute",
+    top: "-6px",
+    right: "-6px",
+    minWidth: "20px",
+    height: "20px",
+    padding: "0 5px",
+    borderRadius: "999px",
+    backgroundColor: "#d32f2f",
+    color: "#fff",
+    fontSize: "12px",
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   navList: {
     listStyle: "none",
