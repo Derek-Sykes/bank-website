@@ -15,14 +15,14 @@ export async function postCategory(category) {
   let { name, description = null, user_id = null } = category;
   console.log("CATEGORY spelled out: ", name, description, user_id);
   try {
-    await pool.query(
+    const [result] = await pool.query(
       `
             INSERT INTO category (name, description, user_id)
             VALUES (?, ?, ?)
             `,
       [name, description, user_id],
     );
-    return 1;
+    return result.insertId;
   } catch (error) {
     let errno = error.errno;
     switch (errno) {
