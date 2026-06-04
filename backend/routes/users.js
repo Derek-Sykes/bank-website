@@ -5,6 +5,7 @@ import {
   removeRefreshTokenDB,
   updateUser,
   deleteUser,
+  getActiveUserByRefreshToken,
 } from "../db/userDB.js";
 import { postItem } from "../db/itemDB.js";
 import {
@@ -14,6 +15,7 @@ import {
 import { authenticateToken } from "../middleware/authenticateToken.js";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken"; // ✅ Ensure jsonwebtoken is imported
+import { validatePassword } from "../utils/passwordValidation.js";
 
 dotenv.config();
 
@@ -57,6 +59,11 @@ router.post("/login", async (req, res) => {
 router.post("/register", async (req, res) => {
   let user = req.body.user;
   if (user) {
+    const passwordError = validatePassword(user.password);
+    if (passwordError) {
+      return res.status(400).send(passwordError);
+    }
+
     let error = await postUser(user);
     if (error) {
       res.status(400).send(error);
@@ -91,10 +98,11 @@ router.post("/register", async (req, res) => {
         // secure: true,
         maxAge: 24 * 60 * 60 * 1000,
       }); // Secure the refresh token in a cookie
-      res.status(201).json({ accessToken, userDetails });
+      return res.status(201).json({ accessToken, userDetails });
     }
   }
-  res.status(401); //401 unauthorized access
+
+  return res.status(401).json({ message: "User details are required" }); //401 unauthorized access
 });
 
 // Logout Route
@@ -122,9 +130,15 @@ router.get("/session", async (req, res) => {
 
   try {
     console.log("🔑 Verifying session token...");
-    const user = jwt.verify(token, process.env.REFRESH_TOKEN);
-    console.log("✅ User found:", user);
-    res.json(user);
+    jwt.verify(token, process.env.REFRESH_TOKEN);
+    const activeUser = await getActiveUserByRefreshToken(token);
+    if (!activeUser) {
+      console.log("❌ Session user no longer exists or is deleted!");
+      return res.status(401).json({ error: "No active session" });
+    }
+
+    console.log("✅ User found:", activeUser);
+    res.json(activeUser);
   } catch (error) {
     console.log("❌ Invalid session!", error.message);
     return res.status(403).json({ error: "Invalid session" });
@@ -136,6 +150,13 @@ router
   .put(authenticateToken, async (req, res) => {
     let user = req.body;
     let user_id = req.user.user_id;
+    if (user.password) {
+      const passwordError = validatePassword(user.password);
+      if (passwordError) {
+        return res.status(400).send(passwordError);
+      }
+    }
+
     let error = await updateUser(user, user_id);
     if (error) {
       res.status(400).send(error);

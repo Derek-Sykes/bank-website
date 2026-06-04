@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { generateAccessToken } from "../controllers/token.js";
-import { verifyRefreshToken } from "../db/userDB.js";
+import { getActiveUserById, verifyRefreshToken } from "../db/userDB.js";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -9,8 +9,7 @@ export function authenticateToken(req, res, next) {
   let token = authHeader && authHeader.split(" ")[1]; // Extract the token (e.g., "Bearer <token>")
   console.log("AUTHHEADER: ", authHeader, "TOKEN: ", token);
   if (!token) {
-    token =
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJlbWFpbCI6ImRlcmVrc3lrZXNAZ21haWwuY29tIiwiaWF0IjoxNzMyMjk4Mjk1LCJleHAiOjE3MzIyOTkxOTV9.LAzZVAiwYB7o9ESExgUkwTlPKNyvEzLSZkCFHFxRwXk";
+    return res.status(401).json({ message: "Access token is missing." });
   }
 
   jwt.verify(token, process.env.ACCESS_TOKEN, async (err, user) => {
@@ -21,7 +20,7 @@ export function authenticateToken(req, res, next) {
       console.log("Refresh Token:", refreshToken);
       let exists = await verifyRefreshToken(refreshToken);
       // check if refresh token even exists in session
-      if (!refreshToken || Object.keys(refreshToken).length === 0 || !exists) {
+      if (!refreshToken || !exists || exists.length === 0) {
         return res
           .status(401)
           .json({ message: "Refresh token is missing! Login!" });
@@ -75,6 +74,11 @@ export function authenticateToken(req, res, next) {
     }
 
     if (user) {
+      const activeUser = await getActiveUserById(user.user_id);
+      if (!activeUser) {
+        return res.status(401).json({ message: "User is no longer active." });
+      }
+
       req.user = user;
       next(); // Proceed to the next middleware or route handler
     }

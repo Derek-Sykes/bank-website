@@ -1,5 +1,6 @@
 import express from "express";
 import userRoutes from "./routes/users.js";
+import authRoutes from "./routes/auth.js";
 import cors from "cors"; // Import the CORS package
 import itemRoutes from "./routes/items.js";
 import categoryRoutes from "./routes/category.js";
@@ -25,6 +26,7 @@ app.get("/", (req, res) => {
 
 // can login and register, no sessions or tokens yet
 app.use("/users", userRoutes);
+app.use("/auth", authRoutes);
 // any routes from here down are protected
 app.use(authenticateToken);
 app.use("/items", itemRoutes);

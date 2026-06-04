@@ -27,14 +27,14 @@ interface AuthContextType {
     email: string,
     password: string,
     f_name: string,
-    l_name: string
+    l_name: string,
   ) => Promise<void>;
   updateAccessTokenMem: (At: string) => void;
 }
 
 // Create the context
 export const AuthContext = createContext<AuthContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -63,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         } else {
           console.error(
             "❌ Session check failed with an unknown error:",
-            error
+            error,
           );
         }
         setUser(null);
@@ -92,7 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       ) {
         console.error(
           "No user details or access token in response:",
-          response.data
+          response.data,
         );
         return;
       }
@@ -102,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       console.log("User set in context:", response.data.userDetails);
       console.log(
         "✅ Access Token Stored in Memory:",
-        response.data.accessToken
+        response.data.accessToken,
       );
     } catch (error: unknown) {
       if (error instanceof AxiosError) {
@@ -112,6 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       } else {
         console.error("Login failed with an unexpected error:", error);
       }
+
+      throw error;
     }
   };
 
@@ -125,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     email: string,
     password: string,
     f_name: string,
-    l_name: string
+    l_name: string,
   ) => {
     await registerUser(email, password, f_name, l_name);
     await login(email, password);
