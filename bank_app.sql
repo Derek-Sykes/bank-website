@@ -45,8 +45,10 @@ CREATE TABLE `item` (
   `item_id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(45) NOT NULL,
   `description` varchar(200) DEFAULT NULL,
-  `cost` double DEFAULT NULL,
-  `balance` double DEFAULT '0',
+  `targetAmount` double DEFAULT NULL,
+  `allocatedAmount` double DEFAULT '0',
+  `allocationPercent` double DEFAULT '0',
+  `status` enum('ACTIVE','FULLY_FUNDED','PURCHASED','CANCELLED') NOT NULL DEFAULT 'ACTIVE',
   `category_id` int DEFAULT NULL,
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`item_id`),
@@ -56,6 +58,57 @@ CREATE TABLE `item` (
   CONSTRAINT `category_id` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`) ON DELETE CASCADE,
   CONSTRAINT `ic_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=57 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+
+--
+-- Table structure for table `ActivityLog`
+--
+
+DROP TABLE IF EXISTS `ActivityLog`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ActivityLog` (
+  `activity_log_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `item_id` int DEFAULT NULL,
+  `category_id` int DEFAULT NULL,
+  `type` varchar(60) NOT NULL,
+  `message` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`activity_log_id`),
+  KEY `activity_user_id_idx` (`user_id`),
+  KEY `activity_item_id_idx` (`item_id`),
+  KEY `activity_category_id_idx` (`category_id`),
+  CONSTRAINT `activity_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `activity_item_id` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE SET NULL,
+  CONSTRAINT `activity_category_id` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `Notification`
+--
+
+DROP TABLE IF EXISTS `Notification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `Notification` (
+  `notification_id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `item_id` int DEFAULT NULL,
+  `category_id` int DEFAULT NULL,
+  `message` varchar(255) NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notification_id`),
+  KEY `notification_user_id_idx` (`user_id`),
+  KEY `notification_item_id_idx` (`item_id`),
+  KEY `notification_category_id_idx` (`category_id`),
+  CONSTRAINT `notification_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `notification_item_id` FOREIGN KEY (`item_id`) REFERENCES `item` (`item_id`) ON DELETE SET NULL,
+  CONSTRAINT `notification_category_id` FOREIGN KEY (`category_id`) REFERENCES `category` (`category_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

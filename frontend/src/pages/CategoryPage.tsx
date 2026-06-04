@@ -12,6 +12,24 @@ interface Category {
   // any other properties...
 }
 
+const FULLY_FUNDED_ALLOCATION_TOOLTIP =
+  "Fully funded items do not receive new allocation until you redistribute this category.";
+
+const formatCurrency = (value: number | string | null | undefined) =>
+  Number(value ?? 0).toFixed(2);
+
+const getProgressPercent = (allocatedAmount: number, targetAmount: number) => {
+  if (!targetAmount || targetAmount <= 0) return 0;
+  return Math.min((allocatedAmount / targetAmount) * 100, 100);
+};
+
+const formatStatus = (status: string) =>
+  status
+    .toLowerCase()
+    .split("_")
+    .map((word) => capitalize(word))
+    .join(" ");
+
 const CategoryPage: React.FC = () => {
   const location = useLocation();
   const { category } = location.state as { category: Category };
@@ -30,14 +48,18 @@ const CategoryPage: React.FC = () => {
   // Update modal state
   const [itemToUpdate, setItemToUpdate] = useState<any | null>(null);
   const [updateName, setUpdateName] = useState("");
-  const [updateCost, setUpdateCost] = useState<number>(0);
+  const [updateTargetAmount, setUpdateTargetAmount] = useState<number>(0);
+  const [updateAllocationPercent, setUpdateAllocationPercent] =
+    useState<number>(0);
+  const [updateStatus, setUpdateStatus] = useState("ACTIVE");
   const [updateDescription, setUpdateDescription] = useState("");
   const [updateError, setUpdateError] = useState("");
 
   // Create modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newCost, setNewCost] = useState<number>(100);
+  const [newTargetAmount, setNewTargetAmount] = useState<number>(100);
+  const [newAllocationPercent, setNewAllocationPercent] = useState<number>(100);
   const [newDescription, setNewDescription] = useState("");
   const [createError, setCreateError] = useState("");
 
@@ -67,7 +89,9 @@ const CategoryPage: React.FC = () => {
   const openUpdateModal = (item: any) => {
     setItemToUpdate(item);
     setUpdateName(item.name);
-    setUpdateCost(item.cost);
+    setUpdateTargetAmount(item.targetAmount ?? 0);
+    setUpdateAllocationPercent(item.allocationPercent ?? 0);
+    setUpdateStatus(item.status ?? "ACTIVE");
     setUpdateDescription(item.description || "");
     setUpdateError("");
     setActiveOptions(null); // Close the options dropdown if open
@@ -79,34 +103,32 @@ const CategoryPage: React.FC = () => {
     setUpdateError("");
   };
 
-  // Submit updated data after validating cost; include category_id to keep it the same
+  // Submit updated data after validating target amount; include category_id to keep it the same
   const handleSubmitUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (itemToUpdate) {
-      if (updateCost < itemToUpdate.balance) {
+      if (updateTargetAmount < itemToUpdate.allocatedAmount) {
         setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
+          "Target amount cannot be lower than allocated amount. Please move money out of this item first.",
         );
         return;
       }
       try {
         const updatedData = {
           name: updateName,
-          cost: updateCost,
+          targetAmount: updateTargetAmount,
+          allocationPercent:
+            updateStatus === "FULLY_FUNDED" ? 0 : updateAllocationPercent,
+          status: updateStatus,
           description: updateDescription,
           category_id: itemToUpdate.category_id, // Keep the same category_id
         };
         await updateItem(itemToUpdate.item_id, updatedData);
-        setItems((prev) =>
-          prev.map((item) =>
-            item.item_id === itemToUpdate.item_id
-              ? { ...item, ...updatedData }
-              : item
-          )
-        );
+        await fetchItems();
         closeUpdateModal();
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error updating item:", error);
+        setUpdateError(error.response?.data || "Error updating item.");
       }
     }
   };
@@ -114,7 +136,8 @@ const CategoryPage: React.FC = () => {
   // Opens the create modal and resets form fields
   const openCreateModal = () => {
     setNewName("");
-    setNewCost(100);
+    setNewTargetAmount(100);
+    setNewAllocationPercent(100);
     setNewDescription("");
     setCreateError("");
     setIsCreateModalOpen(true);
@@ -126,19 +149,21 @@ const CategoryPage: React.FC = () => {
     setCreateError("");
   };
 
-  // Submit new account data after validating cost
+  // Submit new account data after validating target amount
   const handleSubmitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Since balance is preset to 0, cost must be at least 0.
-    if (newCost < 0) {
-      setCreateError("Cost cannot be negative.");
+    // Since allocated amount is preset to 0, target amount must be at least 0.
+    if (newTargetAmount < 0) {
+      setCreateError("Target amount cannot be negative.");
       return;
     }
     try {
       const newItemData = {
         name: newName || "New Account",
-        balance: 0,
-        cost: newCost,
+        allocatedAmount: 0,
+        targetAmount: newTargetAmount,
+        allocationPercent: newAllocationPercent,
+        status: "ACTIVE",
         description: newDescription,
         category_id: category.category_id,
       };
@@ -146,15 +171,16 @@ const CategoryPage: React.FC = () => {
       setItems((prev) => [...prev, response.data]);
       fetchItems();
       closeCreateModal();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating item:", error);
+      setCreateError(error.response?.data || "Error creating item.");
     }
   };
 
-  // New function: Delete an account with auto-transfer if it has a balance.
+  // New function: Delete an account with auto-transfer if it has an allocated amount.
   const handleDeleteAccount = async (account: any) => {
-    // If account has a non-zero balance, automatically transfer its funds to the main account.
-    if (Number(account.balance) > 0) {
+    // If account has a non-zero allocated amount, automatically transfer its funds to the main account.
+    if (Number(account.allocatedAmount) > 0) {
       try {
         // Get main account by calling getItems with category_id = null.
         const response = await getItems({ type: "category_id", value: null });
@@ -165,9 +191,13 @@ const CategoryPage: React.FC = () => {
         ) {
           const mainAccount = response.data[0];
           // Transfer funds: from the account to be deleted (account.item_id) to the main account.
-          await transfer(account.item_id, mainAccount.item_id, account.balance);
+          await transfer(
+            account.item_id,
+            mainAccount.item_id,
+            account.allocatedAmount,
+          );
           console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
+            `Transferred $${account.allocatedAmount} from account ${account.item_id} to main account ${mainAccount.item_id}`,
           );
         } else {
           console.error("Main account not found. Cannot transfer funds.");
@@ -181,7 +211,7 @@ const CategoryPage: React.FC = () => {
     try {
       await deleteItem(account.item_id);
       setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
+        prev.filter((item) => item.item_id !== account.item_id),
       );
     } catch (error) {
       console.error("Error deleting account:", error);
@@ -217,9 +247,33 @@ const CategoryPage: React.FC = () => {
             <div key={item.item_id || index} style={styles.accountCard}>
               <div style={styles.accountInfo}>
                 <h3 style={styles.accountName}>{item.name}</h3>
-                <p style={styles.accountDetails}>
-                  Balance: ${item.balance ? item.balance.toFixed(2) : "0"}{" "}
-                  &nbsp;|&nbsp; Cost: ${item.cost ? item.cost.toFixed(2) : "0"}
+                <div style={styles.accountHeading}>
+                  <p style={styles.accountDetails}>
+                    Allocated: ${formatCurrency(item.allocatedAmount)}
+                    &nbsp;|&nbsp; Target: ${formatCurrency(item.targetAmount)}
+                    &nbsp;|&nbsp; Allocation: {item.allocationPercent ?? 0}%
+                  </p>
+                  <span style={styles.statusBadge}>
+                    {formatStatus(item.status ?? "ACTIVE")}
+                  </span>
+                </div>
+                <div style={styles.progressTrack}>
+                  <div
+                    style={{
+                      ...styles.progressFill,
+                      width: `${getProgressPercent(
+                        Number(item.allocatedAmount),
+                        Number(item.targetAmount),
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <p style={styles.progressText}>
+                  {getProgressPercent(
+                    Number(item.allocatedAmount),
+                    Number(item.targetAmount),
+                  ).toFixed(0)}
+                  % funded
                 </p>
                 <p style={styles.accountDescription}>{item.description}</p>
               </div>
@@ -228,7 +282,7 @@ const CategoryPage: React.FC = () => {
                   style={styles.optionsButton}
                   onClick={() =>
                     setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
+                      activeOptions === item.item_id ? null : item.item_id,
                     )
                   }
                 >
@@ -280,11 +334,13 @@ const CategoryPage: React.FC = () => {
                 />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Cost:</label>
+                <label style={styles.label}>Target amount:</label>
                 <input
                   type="number"
-                  value={updateCost}
-                  onChange={(e) => setUpdateCost(parseFloat(e.target.value))}
+                  value={updateTargetAmount}
+                  onChange={(e) =>
+                    setUpdateTargetAmount(parseFloat(e.target.value))
+                  }
                   style={styles.inputField}
                   step="0.01"
                 />
@@ -299,13 +355,50 @@ const CategoryPage: React.FC = () => {
                 />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Balance:</label>
+                <label style={styles.label}>Allocated amount:</label>
                 <input
                   type="number"
-                  value={itemToUpdate.balance}
+                  value={itemToUpdate.allocatedAmount}
                   style={{ ...styles.inputField, backgroundColor: "#f0f0f0" }}
                   readOnly
                 />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Allocation percent:</label>
+                <input
+                  type="number"
+                  value={
+                    updateStatus === "FULLY_FUNDED"
+                      ? 0
+                      : updateAllocationPercent
+                  }
+                  onChange={(e) =>
+                    setUpdateAllocationPercent(parseFloat(e.target.value))
+                  }
+                  style={styles.inputField}
+                  title={
+                    updateStatus === "FULLY_FUNDED"
+                      ? FULLY_FUNDED_ALLOCATION_TOOLTIP
+                      : undefined
+                  }
+                  disabled={updateStatus === "FULLY_FUNDED"}
+                  min="0"
+                  max="100"
+                  step="0.01"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Status:</label>
+                <select
+                  value={updateStatus}
+                  onChange={(e) => setUpdateStatus(e.target.value)}
+                  style={styles.inputField}
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="FULLY_FUNDED">Fully funded</option>
+                  <option value="PURCHASED">Purchased</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
               </div>
               {updateError && <p style={styles.errorText}>{updateError}</p>}
               <div style={styles.modalButtons}>
@@ -341,12 +434,28 @@ const CategoryPage: React.FC = () => {
                 />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Cost:</label>
+                <label style={styles.label}>Target amount:</label>
                 <input
                   type="number"
-                  value={newCost}
-                  onChange={(e) => setNewCost(parseFloat(e.target.value))}
+                  value={newTargetAmount}
+                  onChange={(e) =>
+                    setNewTargetAmount(parseFloat(e.target.value))
+                  }
                   style={styles.inputField}
+                  step="0.01"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Allocation percent:</label>
+                <input
+                  type="number"
+                  value={newAllocationPercent}
+                  onChange={(e) =>
+                    setNewAllocationPercent(parseFloat(e.target.value))
+                  }
+                  style={styles.inputField}
+                  min="0"
+                  max="100"
                   step="0.01"
                 />
               </div>
@@ -360,7 +469,7 @@ const CategoryPage: React.FC = () => {
                 />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.label}>Balance:</label>
+                <label style={styles.label}>Allocated amount:</label>
                 <input
                   type="number"
                   value={0}
@@ -470,6 +579,39 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: "16px",
     color: "#666",
     margin: "0 0 8px 0",
+  },
+  accountHeading: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  statusBadge: {
+    backgroundColor: "#e3f2fd",
+    color: "#0d47a1",
+    borderRadius: "999px",
+    padding: "4px 10px",
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+  progressTrack: {
+    width: "100%",
+    height: "12px",
+    backgroundColor: "#e0e0e0",
+    borderRadius: "999px",
+    overflow: "hidden",
+    margin: "8px 0 4px",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#388e3c",
+    borderRadius: "999px",
+    transition: "width 0.3s ease",
+  },
+  progressText: {
+    fontSize: "13px",
+    color: "#555",
+    margin: "0 0 8px",
   },
   accountDescription: {
     fontSize: "15px",

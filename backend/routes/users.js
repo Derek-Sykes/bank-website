@@ -65,8 +65,10 @@ router.post("/register", async (req, res) => {
       const mainAcct = {
         name: "Main Account",
         description: "Main Account",
-        cost: null,
-        balance: 5000,
+        targetAmount: null,
+        allocatedAmount: 5000,
+        allocationPercent: 0,
+        status: "ACTIVE",
         category_id: null,
         user_id: userDetails.user_id,
       };

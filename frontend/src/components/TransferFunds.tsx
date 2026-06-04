@@ -4,7 +4,7 @@ import { useItemsApi } from "../api_requests/items";
 interface Account {
   item_id: number;
   name: string;
-  balance: number;
+  allocatedAmount: number;
   // add other properties as needed
 }
 
@@ -62,9 +62,9 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
     }
     // Check if selected from-account has sufficient funds.
     const selectedFrom = accounts.find(
-      (acc) => acc.item_id === Number(fromAccount)
+      (acc) => acc.item_id === Number(fromAccount),
     );
-    if (selectedFrom && selectedFrom.balance < numericAmount) {
+    if (selectedFrom && selectedFrom.allocatedAmount < numericAmount) {
       setError("Insufficient funds in the selected 'from' account.");
       return;
     }
@@ -97,7 +97,8 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
                 <option value="">Select account</option>
                 {accounts.map((account) => (
                   <option key={account.item_id} value={account.item_id}>
-                    {account.name} (Balance: ${account.balance.toFixed(2)})
+                    {account.name} (Allocated: $
+                    {account.allocatedAmount.toFixed(2)})
                   </option>
                 ))}
               </select>
@@ -112,7 +113,8 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
                 <option value="">Select account</option>
                 {accounts.map((account) => (
                   <option key={account.item_id} value={account.item_id}>
-                    {account.name} (Balance: ${account.balance.toFixed(2)})
+                    {account.name} (Allocated: $
+                    {account.allocatedAmount.toFixed(2)})
                   </option>
                 ))}
               </select>

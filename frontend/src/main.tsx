@@ -1,4 +1,3 @@
-import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
@@ -9,7 +8,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <AuthProvider>
       <App />
     </AuthProvider>
-  </BrowserRouter>
+  </BrowserRouter>,
 );
 
 // command to start project: cd ./frontend/
@@ -32,7 +31,7 @@ NEXT TASK:
 COMPLETED TASKS:
 - allowed the home page to display the categories of the user logged in
 - once the user clicks on the category let them see the accounts within that category of theirs
-- add a balance field to the item object in sql, my backend and make my frontend then access it also.
+- add a allocated amount field to the item object in sql, my backend and make my frontend then access it also.
 - let user create, update, and delete accounts within a category (things to consider, what if they try to delete an account with money in it? )
 - let user do the things above also for accounts.
 - let category show  the decription when you click on it within  the categoryPage.
@@ -58,8 +57,8 @@ THEY SHOULD BE ABLE TO...
 
 
 THINGS TO KEEP IN MIND (CONSTRAINTS)
-- dont let the user put more money into an account that has reached its cost.
-- dont let user lower cost below money currently in the acccount (they should get a message to transfer money out first.)
+- dont let the user put more money into an account that has reached its target amount.
+- dont let user lower target amount below money currently in the account (they should get a message to transfer money out first.)
 - let the user decide what happens to accounds they delete with money in it. (go straight to main account, or get redistributed in category or to all catgories)
 - what if they try to delete a category with accounts within? 
 - ask if they would like money to be redristributed abmong all accounts, or just put in the main account, or nevermind.
