@@ -21,7 +21,7 @@ export const useCategoryApi = () => {
   };
 
   // GET: Retrieve categories (using a data field)
-  const getCategories = async (data: Record<string, any> = {}) => {
+  const getCategories = async (data: Record<string, unknown> = {}) => {
     const headers = buildHeaders();
     const response = await api.request({
       url: "/categorys/category",
@@ -36,7 +36,7 @@ export const useCategoryApi = () => {
   };
 
   // POST: Create a new category
-  const createCategory = async (categoryData: Record<string, any>) => {
+  const createCategory = async (categoryData: Record<string, unknown>) => {
     const headers = buildHeaders();
     const response = await api.post("/categorys/category", categoryData, {
       headers,
@@ -50,7 +50,7 @@ export const useCategoryApi = () => {
   // PUT: Update a category (sending category_id in the request body)
   const updateCategory = async (
     category_id: string | number,
-    updateData: Record<string, any>
+    updateData: Record<string, unknown>
   ) => {
     const headers = buildHeaders();
     const payload = { category_id, ...updateData };
@@ -64,7 +64,7 @@ export const useCategoryApi = () => {
   // DELETE: Remove a category
   const deleteCategory = async (
     category_id: string | number,
-    options?: Record<string, any>
+    options?: Record<string, unknown>
   ) => {
     const headers = buildHeaders();
     const data = { category_id, ...options };
