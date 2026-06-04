@@ -1,57 +1,82 @@
-import React, { useContext, useEffect, useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useItemsApi } from "../api_requests/items";
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
+import { useItemsApi } from "../api_requests/items";
+import { AppShell } from "../components/layout";
+import { Card, DonutChart, Modal, ProgressBar } from "../components/ui";
 import { capitalize } from "../utils/generalUtils";
 
-interface Category {
+type Category = {
   category_id: number;
   name: string;
+  description?: string;
+};
+
+type Item = {
+  item_id: number;
+  name: string;
+  balance?: number;
+  cost?: number;
+  description?: string;
+  category_id?: number | null;
+  status?: string;
+};
+
+type ItemForm = {
+  name: string;
+  cost: string;
   description: string;
-  user_id: number;
-  // any other properties...
-}
+};
+
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+const toNumber = (value: unknown) => Number(value || 0);
+const remainingFor = (item: Item) => Math.max(0, toNumber(item.cost) - toNumber(item.balance));
+
+const statusFor = (item: Item) => {
+  const status = item.status?.toLowerCase();
+  if (status === "cancelled" || status === "canceled") return "cancelled";
+  if (status === "purchased") return "purchased";
+  if (toNumber(item.cost) > 0 && toNumber(item.balance) >= toNumber(item.cost)) return "fully funded";
+  return "active";
+};
 
 const CategoryPage: React.FC = () => {
+  const { category: categorySlug } = useParams();
   const location = useLocation();
-  const { category } = location.state as { category: Category };
   const navigate = useNavigate();
   const auth = useContext(AuthContext);
+  const category = (location.state as { category?: Category } | null)?.category;
+  const { getItems, createItem, updateItem, deleteItem, transfer } = useItemsApi();
 
-  // Destructure transfer along with other API functions.
-  const { getItems, createItem, updateItem, deleteItem, transfer } =
-    useItemsApi();
-
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [mainAccount, setMainAccount] = useState<Item | null>(null);
   const [loadingItems, setLoadingItems] = useState(true);
-  // For the options dropdown on each account
-  const [activeOptions, setActiveOptions] = useState<number | null>(null);
-
-  // Update modal state
-  const [itemToUpdate, setItemToUpdate] = useState<any | null>(null);
-  const [updateName, setUpdateName] = useState("");
-  const [updateCost, setUpdateCost] = useState<number>(0);
-  const [updateDescription, setUpdateDescription] = useState("");
-  const [updateError, setUpdateError] = useState("");
-
-  // Create modal state
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newCost, setNewCost] = useState<number>(100);
-  const [newDescription, setNewDescription] = useState("");
-  const [createError, setCreateError] = useState("");
+  const [activeOptions, setActiveOptions] = useState<number | null>(null);
+  const [form, setForm] = useState<ItemForm>({ name: "", cost: "100", description: "" });
+  const [formError, setFormError] = useState("");
+  const [allocationAmounts, setAllocationAmounts] = useState<Record<number, string>>({});
+  const [allocationMessage, setAllocationMessage] = useState("");
 
   const fetchItems = async () => {
+    if (!category) {
+      setLoadingItems(false);
+      return;
+    }
+
     setLoadingItems(true);
     try {
-      const response = await getItems({
-        type: "category_id",
-        value: category.category_id,
-      });
-      if (!response.data?.accessToken) {
-        setItems(response.data);
-        console.log("Items set:", response.data);
-      }
+      const [itemsResponse, mainResponse] = await Promise.all([
+        getItems({ type: "category_id", value: category.category_id }),
+        getItems({ type: "category_id", value: null }),
+      ]);
+      if (!itemsResponse.data?.accessToken) setItems(itemsResponse.data || []);
+      if (Array.isArray(mainResponse.data) && mainResponse.data.length > 0) setMainAccount(mainResponse.data[0]);
     } catch (error) {
       console.error("Error fetching items:", error);
     } finally {
@@ -61,537 +86,298 @@ const CategoryPage: React.FC = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [auth?.accessToken]);
+  }, [auth?.accessToken, category?.category_id]);
 
-  // Opens the update modal and pre-fills form with current data
-  const openUpdateModal = (item: any) => {
-    setItemToUpdate(item);
-    setUpdateName(item.name);
-    setUpdateCost(item.cost);
-    setUpdateDescription(item.description || "");
-    setUpdateError("");
-    setActiveOptions(null); // Close the options dropdown if open
-  };
+  const totals = useMemo(() => {
+    const totalBalance = items.reduce((sum, item) => sum + toNumber(item.balance), 0);
+    const totalTarget = items.reduce((sum, item) => sum + toNumber(item.cost), 0);
+    const unallocated = items.reduce((sum, item) => sum + Math.max(0, toNumber(item.balance) - toNumber(item.cost)), 0);
+    return { totalBalance, totalTarget, unallocated };
+  }, [items]);
 
-  // Closes the update modal
-  const closeUpdateModal = () => {
-    setItemToUpdate(null);
-    setUpdateError("");
-  };
+  const sections = useMemo(() => {
+    return {
+      active: items.filter((item) => statusFor(item) === "active"),
+      fullyFunded: items.filter((item) => statusFor(item) === "fully funded"),
+      purchased: items.filter((item) => statusFor(item) === "purchased"),
+      cancelled: items.filter((item) => statusFor(item) === "cancelled"),
+    };
+  }, [items]);
 
-  // Submit updated data after validating cost; include category_id to keep it the same
-  const handleSubmitUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (itemToUpdate) {
-      if (updateCost < itemToUpdate.balance) {
-        setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
-        );
-        return;
-      }
-      try {
-        const updatedData = {
-          name: updateName,
-          cost: updateCost,
-          description: updateDescription,
-          category_id: itemToUpdate.category_id, // Keep the same category_id
-        };
-        await updateItem(itemToUpdate.item_id, updatedData);
-        setItems((prev) =>
-          prev.map((item) =>
-            item.item_id === itemToUpdate.item_id
-              ? { ...item, ...updatedData }
-              : item
-          )
-        );
-        closeUpdateModal();
-      } catch (error) {
-        console.error("Error updating item:", error);
-      }
-    }
-  };
+  const chartSegments = items.map((item, index) => ({
+    label: item.name,
+    value: toNumber(item.balance),
+    color: ["#2563eb", "#14b8a6", "#f59e0b", "#ec4899", "#8b5cf6", "#22c55e"][index % 6],
+  }));
 
-  // Opens the create modal and resets form fields
   const openCreateModal = () => {
-    setNewName("");
-    setNewCost(100);
-    setNewDescription("");
-    setCreateError("");
+    setForm({ name: "", cost: "100", description: "" });
+    setFormError("");
     setIsCreateModalOpen(true);
   };
 
-  // Closes the create modal
-  const closeCreateModal = () => {
-    setIsCreateModalOpen(false);
-    setCreateError("");
+  const openUpdateModal = (item: Item) => {
+    setEditingItem(item);
+    setForm({ name: item.name, cost: String(toNumber(item.cost)), description: item.description || "" });
+    setFormError("");
+    setActiveOptions(null);
   };
 
-  // Submit new account data after validating cost
-  const handleSubmitCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Since balance is preset to 0, cost must be at least 0.
-    if (newCost < 0) {
-      setCreateError("Cost cannot be negative.");
+  const closeItemModal = () => {
+    setEditingItem(null);
+    setIsCreateModalOpen(false);
+    setFormError("");
+  };
+
+  const handleSubmitItem = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!category) return;
+
+    const cost = Number(form.cost);
+    if (!form.name.trim()) {
+      setFormError("Goal name is required.");
       return;
     }
-    try {
-      const newItemData = {
-        name: newName || "New Account",
-        balance: 0,
-        cost: newCost,
-        description: newDescription,
-        category_id: category.category_id,
-      };
-      const response = await createItem(newItemData);
-      setItems((prev) => [...prev, response.data]);
-      fetchItems();
-      closeCreateModal();
-    } catch (error) {
-      console.error("Error creating item:", error);
+    if (!Number.isFinite(cost) || cost < 0) {
+      setFormError("Cost must be a positive number.");
+      return;
     }
-  };
+    if (editingItem && cost < toNumber(editingItem.balance)) {
+      setFormError("Cost cannot be lower than the current balance.");
+      return;
+    }
 
-  // New function: Delete an account with auto-transfer if it has a balance.
-  const handleDeleteAccount = async (account: any) => {
-    // If account has a non-zero balance, automatically transfer its funds to the main account.
-    if (Number(account.balance) > 0) {
-      try {
-        // Get main account by calling getItems with category_id = null.
-        const response = await getItems({ type: "category_id", value: null });
-        if (
-          response &&
-          Array.isArray(response.data) &&
-          response.data.length > 0
-        ) {
-          const mainAccount = response.data[0];
-          // Transfer funds: from the account to be deleted (account.item_id) to the main account.
-          await transfer(account.item_id, mainAccount.item_id, account.balance);
-          console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
-          );
-        } else {
-          console.error("Main account not found. Cannot transfer funds.");
-        }
-      } catch (error) {
-        console.error("Error during transfer:", error);
-        return; // Stop deletion if transfer fails.
+    try {
+      const payload = { name: form.name, cost, description: form.description, category_id: category.category_id };
+      if (editingItem) {
+        await updateItem(editingItem.item_id, payload);
+      } else {
+        await createItem({ ...payload, balance: 0 });
       }
-    }
-    // After transferring funds (if necessary), delete the account.
-    try {
-      await deleteItem(account.item_id);
-      setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
-      );
+      closeItemModal();
+      fetchItems();
     } catch (error) {
-      console.error("Error deleting account:", error);
+      console.error("Error saving item:", error);
+      setFormError("Unable to save goal. Please try again.");
     }
   };
 
-  if (!auth) return <p>Loading...</p>;
+  const handleDeleteItem = async (item: Item) => {
+    try {
+      if (toNumber(item.balance) > 0 && mainAccount) {
+        await transfer(item.item_id, mainAccount.item_id, toNumber(item.balance));
+      }
+      await deleteItem(item.item_id);
+      setActiveOptions(null);
+      fetchItems();
+    } catch (error) {
+      console.error("Error deleting item:", error);
+    }
+  };
 
-  // Fallback dummy data if no items are fetched.
-  const miniAccounts = items;
+  const handleAllocation = async (item: Item) => {
+    if (!mainAccount) return;
+    const amount = Number(allocationAmounts[item.item_id]);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setAllocationMessage("Enter a positive allocation amount.");
+      return;
+    }
+    if (amount > toNumber(mainAccount.balance)) {
+      setAllocationMessage("That allocation is higher than your main account balance.");
+      return;
+    }
+    if (amount > remainingFor(item)) {
+      setAllocationMessage("This goal does not need that much funding.");
+      return;
+    }
+
+    try {
+      await transfer(mainAccount.item_id, item.item_id, amount);
+      setAllocationAmounts((current) => ({ ...current, [item.item_id]: "" }));
+      setAllocationMessage("Allocation saved.");
+      fetchItems();
+    } catch (error) {
+      console.error("Allocation failed:", error);
+      setAllocationMessage("Allocation failed. Please try again.");
+    }
+  };
+
+  const allocateUnassignedFunds = async () => {
+    if (!mainAccount) return;
+    let available = toNumber(mainAccount.balance);
+    if (available <= 0) {
+      setAllocationMessage("No unassigned funds are available in the main account.");
+      return;
+    }
+
+    try {
+      for (const item of sections.active) {
+        const amount = Math.min(available, remainingFor(item));
+        if (amount > 0) {
+          await transfer(mainAccount.item_id, item.item_id, amount);
+          available -= amount;
+        }
+        if (available <= 0) break;
+      }
+      setAllocationMessage("Unassigned funds allocated to active goals.");
+      fetchItems();
+    } catch (error) {
+      console.error("Auto-allocation failed:", error);
+      setAllocationMessage("Auto-allocation failed. Please try again.");
+    }
+  };
+
+  const renderSection = (title: string, list: Item[]) => (
+    <Card className="itemSection">
+      <div className="sectionHeader">
+        <div>
+          <p className="eyebrow">{title}</p>
+          <h2>{list.length} items</h2>
+        </div>
+      </div>
+      {list.length === 0 ? (
+        <div className="emptyState">No {title.toLowerCase()} items.</div>
+      ) : (
+        <div className="itemList">
+          {list.map((item) => (
+            <Card className="itemCard" key={item.item_id}>
+              <div className="itemCard__header">
+                <div>
+                  <h3>{item.name}</h3>
+                  <p className="muted">{item.description || "No description yet"}</p>
+                </div>
+                <button className="iconButton" type="button" onClick={() => setActiveOptions(activeOptions === item.item_id ? null : item.item_id)} aria-label={`Options for ${item.name}`}>
+                  ⋯
+                </button>
+              </div>
+              <span className="itemStatus">{statusFor(item)}</span>
+              <ProgressBar value={toNumber(item.balance)} max={toNumber(item.cost) || 1} label={`${currency.format(toNumber(item.balance))} of ${currency.format(toNumber(item.cost))}`} />
+              {activeOptions === item.item_id && (
+                <div className="categoryCard__menu">
+                  <button type="button" onClick={() => openUpdateModal(item)}>Modify</button>
+                  <button type="button" onClick={() => handleDeleteItem(item)}>Delete</button>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+
+  if (!category) {
+    return (
+      <AppShell>
+        <Card>
+          <p className="eyebrow">Category not loaded</p>
+          <h2>{capitalize(categorySlug || "category")}</h2>
+          <p className="muted">Open a category from the dashboard so its account details can be loaded.</p>
+          <Link className="button button--primary" to="/home">Back to dashboard</Link>
+        </Card>
+      </AppShell>
+    );
+  }
 
   return (
-    <div style={styles.container}>
-      <header style={styles.header}>
-        <h1 style={styles.title}>{capitalize(category.name)} Accounts</h1>
-        <button style={styles.backButton} onClick={() => navigate(-1)}>
-          Back
-        </button>
-      </header>
-
-      {/* Create account button at the top */}
-      <section style={styles.topButtons}>
-        <button style={styles.actionButton} onClick={openCreateModal}>
-          Create New Account
-        </button>
-      </section>
-
-      <main style={styles.mainContent}>
-        {loadingItems ? (
-          <p style={styles.infoText}>Loading accounts...</p>
-        ) : miniAccounts.length > 0 ? (
-          miniAccounts.map((item, index) => (
-            <div key={item.item_id || index} style={styles.accountCard}>
-              <div style={styles.accountInfo}>
-                <h3 style={styles.accountName}>{item.name}</h3>
-                <p style={styles.accountDetails}>
-                  Balance: ${item.balance ? item.balance.toFixed(2) : "0"}{" "}
-                  &nbsp;|&nbsp; Cost: ${item.cost ? item.cost.toFixed(2) : "0"}
-                </p>
-                <p style={styles.accountDescription}>{item.description}</p>
-              </div>
-              <div style={styles.optionsContainer}>
-                <button
-                  style={styles.optionsButton}
-                  onClick={() =>
-                    setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
-                    )
-                  }
-                >
-                  ⋮
-                </button>
-                {activeOptions === item.item_id && (
-                  <div style={styles.optionsDropdown}>
-                    <button
-                      style={styles.dropdownItem}
-                      onClick={() => openUpdateModal(item)}
-                    >
-                      Modify
-                    </button>
-                    <button
-                      style={styles.dropdownItem}
-                      onClick={() => {
-                        handleDeleteAccount(item);
-                        setActiveOptions(null);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+    <AppShell onPrimaryAction={openCreateModal}>
+      <div className="dashboardGrid">
+        <div className="detailHeader">
+          <Card tone="accent">
+            <button className="button button--secondary" type="button" onClick={() => navigate(-1)}>Back</button>
+            <h1 className="detailTitle">{capitalize(category.name)}</h1>
+            <p className="muted">{category.description || "Track category goals, allocations, and funded purchases."}</p>
+            <div className="kpiRow">
+              <Card className="statCard">
+                <span className="muted">Total balance</span>
+                <strong>{currency.format(totals.totalBalance)}</strong>
+              </Card>
+              <Card className="statCard">
+                <span className="muted">Unallocated</span>
+                <strong>{currency.format(totals.unallocated)}</strong>
+              </Card>
+              <Card className="statCard">
+                <span className="muted">Main account</span>
+                <strong>{currency.format(toNumber(mainAccount?.balance))}</strong>
+              </Card>
             </div>
-          ))
-        ) : (
-          <p style={styles.noData}>No accounts found for this category.</p>
-        )}
-        <Link to="/" style={styles.linkButton}>
-          Back to Home
-        </Link>
-      </main>
-
-      {/* Update Modal */}
-      {itemToUpdate && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <h2 style={styles.modalTitle}>Update Account</h2>
-            <form onSubmit={handleSubmitUpdate}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Name:</label>
-                <input
-                  type="text"
-                  value={updateName}
-                  onChange={(e) => setUpdateName(e.target.value)}
-                  style={styles.inputField}
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Cost:</label>
-                <input
-                  type="number"
-                  value={updateCost}
-                  onChange={(e) => setUpdateCost(parseFloat(e.target.value))}
-                  style={styles.inputField}
-                  step="0.01"
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Description:</label>
-                <input
-                  type="text"
-                  value={updateDescription}
-                  onChange={(e) => setUpdateDescription(e.target.value)}
-                  style={styles.inputField}
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Balance:</label>
-                <input
-                  type="number"
-                  value={itemToUpdate.balance}
-                  style={{ ...styles.inputField, backgroundColor: "#f0f0f0" }}
-                  readOnly
-                />
-              </div>
-              {updateError && <p style={styles.errorText}>{updateError}</p>}
-              <div style={styles.modalButtons}>
-                <button type="submit" style={styles.modalButton}>
-                  Save
-                </button>
-                <button
-                  type="button"
-                  style={styles.modalButton}
-                  onClick={closeUpdateModal}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
+          </Card>
+          <Card>
+            <p className="eyebrow">Category distribution</p>
+            <DonutChart centerLabel="Saved" centerValue={currency.format(totals.totalBalance)} segments={chartSegments} />
+          </Card>
         </div>
-      )}
 
-      {/* Create Modal */}
-      {isCreateModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <h2 style={styles.modalTitle}>Create New Account</h2>
-            <form onSubmit={handleSubmitCreate}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Name:</label>
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  style={styles.inputField}
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Cost:</label>
-                <input
-                  type="number"
-                  value={newCost}
-                  onChange={(e) => setNewCost(parseFloat(e.target.value))}
-                  style={styles.inputField}
-                  step="0.01"
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Description:</label>
-                <input
-                  type="text"
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  style={styles.inputField}
-                />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Balance:</label>
-                <input
-                  type="number"
-                  value={0}
-                  style={{ ...styles.inputField, backgroundColor: "#f0f0f0" }}
-                  readOnly
-                />
-              </div>
-              {createError && <p style={styles.errorText}>{createError}</p>}
-              <div style={styles.modalButtons}>
-                <button type="submit" style={styles.modalButton}>
-                  Create
-                </button>
-                <button
-                  type="button"
-                  style={styles.modalButton}
-                  onClick={closeCreateModal}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+        <div className="itemSections">
+          <div className="sectionHeader">
+            <div>
+              <p className="eyebrow">Category detail</p>
+              <h2>Goals and purchases</h2>
+            </div>
+            <button className="button button--primary" type="button" onClick={openCreateModal}>Create Item</button>
           </div>
+          {loadingItems ? <Card><div className="emptyState">Loading items...</div></Card> : null}
+          {renderSection("Active", sections.active)}
+          {renderSection("Fully Funded", sections.fullyFunded)}
+          {renderSection("Purchased", sections.purchased)}
+          {renderSection("Cancelled", sections.cancelled)}
         </div>
-      )}
-    </div>
+
+        <aside className="allocationPanel">
+          <Card>
+            <p className="eyebrow">Allocation editor</p>
+            <h2>Fund an item</h2>
+            <p className="muted">Move money from the main account into active goals without exceeding their target.</p>
+            <div className="allocationForm">
+              {sections.active.length === 0 ? <div className="emptyState">No active items need funding.</div> : null}
+              {sections.active.map((item) => (
+                <div className="formField" key={item.item_id}>
+                  <span>{item.name} · needs {currency.format(remainingFor(item))}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={allocationAmounts[item.item_id] || ""}
+                    onChange={(event) => setAllocationAmounts((current) => ({ ...current, [item.item_id]: event.target.value }))}
+                  />
+                  <button className="button button--secondary" type="button" onClick={() => handleAllocation(item)}>Allocate</button>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card tone="dark">
+            <p className="eyebrow">Allocate unassigned funds</p>
+            <h2>{currency.format(toNumber(mainAccount?.balance))}</h2>
+            <p className="muted">Automatically fill active goals from oldest to newest until the main account is empty or goals are funded.</p>
+            <button className="button button--primary" type="button" onClick={allocateUnassignedFunds}>Allocate Unassigned Funds</button>
+            {allocationMessage && <p>{allocationMessage}</p>}
+          </Card>
+        </aside>
+      </div>
+
+      <Modal title={editingItem ? "Update Item" : "Create Item"} isOpen={isCreateModalOpen || Boolean(editingItem)} onClose={closeItemModal}>
+        <form className="formGrid" onSubmit={handleSubmitItem}>
+          <label className="formField">
+            Name
+            <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+          </label>
+          <label className="formField">
+            Cost
+            <input type="number" min="0" step="0.01" value={form.cost} onChange={(event) => setForm((current) => ({ ...current, cost: event.target.value }))} />
+          </label>
+          <label className="formField">
+            Description
+            <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+          </label>
+          {formError && <p className="errorText">{formError}</p>}
+          <div className="actionRow">
+            <button className="button button--primary" type="submit">Save Item</button>
+            <button className="button button--ghost" type="button" onClick={closeItemModal}>Cancel</button>
+          </div>
+        </form>
+      </Modal>
+    </AppShell>
   );
-};
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    maxWidth: "900px",
-    margin: "40px auto",
-    padding: "30px",
-    backgroundColor: "#fff",
-    borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-    fontFamily: "'Roboto', sans-serif",
-    color: "#333",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "30px",
-    borderBottom: "2px solid #e0e0e0",
-    paddingBottom: "10px",
-  },
-  title: {
-    fontSize: "32px",
-    fontWeight: 700,
-    color: "#222",
-    margin: 0,
-  },
-  backButton: {
-    backgroundColor: "#1976d2",
-    color: "#fff",
-    border: "none",
-    padding: "10px 18px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "16px",
-    transition: "background-color 0.3s ease",
-  },
-  topButtons: {
-    display: "flex",
-    justifyContent: "center",
-    marginBottom: "30px",
-  },
-  actionButton: {
-    backgroundColor: "#388e3c",
-    color: "#fff",
-    border: "none",
-    padding: "12px 20px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontSize: "16px",
-    transition: "background-color 0.3s ease",
-  },
-  mainContent: {
-    textAlign: "left",
-  },
-  infoText: {
-    fontSize: "18px",
-    color: "#555",
-    textAlign: "center",
-  },
-  accountCard: {
-    backgroundColor: "#f9f9f9",
-    padding: "20px",
-    borderRadius: "8px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-    marginBottom: "20px",
-  },
-  accountInfo: {
-    flex: 1,
-  },
-  accountName: {
-    fontSize: "22px",
-    fontWeight: 600,
-    margin: "0 0 5px 0",
-    color: "#333",
-  },
-  accountDetails: {
-    fontSize: "16px",
-    color: "#666",
-    margin: "0 0 8px 0",
-  },
-  accountDescription: {
-    fontSize: "15px",
-    color: "#777",
-    margin: 0,
-  },
-  optionsContainer: {
-    position: "relative",
-    marginLeft: "15px",
-  },
-  optionsButton: {
-    background: "transparent",
-    border: "none",
-    fontSize: "24px",
-    cursor: "pointer",
-    color: "#888",
-  },
-  optionsDropdown: {
-    position: "absolute",
-    top: "35px",
-    right: 0,
-    backgroundColor: "#fff",
-    border: "1px solid #ddd",
-    borderRadius: "6px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-    zIndex: 10,
-    overflow: "hidden",
-  },
-  dropdownItem: {
-    display: "block",
-    padding: "10px 16px",
-    width: "100%",
-    background: "transparent",
-    border: "none",
-    textAlign: "left",
-    cursor: "pointer",
-    fontSize: "16px",
-    color: "#333",
-    transition: "background 0.2s ease",
-  },
-  noData: {
-    fontSize: "18px",
-    color: "#777",
-    textAlign: "center",
-    margin: "40px 0",
-  },
-  linkButton: {
-    display: "inline-block",
-    marginTop: "30px",
-    backgroundColor: "#1976d2",
-    color: "#fff",
-    padding: "12px 24px",
-    borderRadius: "6px",
-    textDecoration: "none",
-    fontSize: "16px",
-    transition: "background-color 0.3s ease",
-  },
-  modalOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100vw",
-    height: "100vh",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: "30px",
-    borderRadius: "8px",
-    width: "90%",
-    maxWidth: "450px",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-  },
-  modalTitle: {
-    margin: "0 0 20px 0",
-    fontSize: "26px",
-    fontWeight: 600,
-    color: "#333",
-  },
-  formGroup: {
-    marginBottom: "20px",
-  },
-  label: {
-    display: "block",
-    marginBottom: "8px",
-    fontSize: "16px",
-    color: "#555",
-  },
-  inputField: {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: "16px",
-    borderRadius: "4px",
-    border: "1px solid #ccc",
-    outline: "none",
-    transition: "border-color 0.3s ease",
-  },
-  errorText: {
-    color: "#d32f2f",
-    fontSize: "14px",
-    marginTop: "5px",
-  },
-  modalButtons: {
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: "15px",
-    marginTop: "20px",
-  },
-  modalButton: {
-    padding: "10px 18px",
-    border: "none",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "16px",
-    backgroundColor: "#1976d2",
-    color: "#fff",
-    transition: "background-color 0.3s ease",
-  },
 };
 
 export default CategoryPage;
