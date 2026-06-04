@@ -50,7 +50,7 @@ export const useItemsApi = () => {
   // PUT: Update an existing item by sending the item_id and update data in the request body
   const updateItem = async (
     item_id: string | number,
-    updateData: Record<string, unknown>
+    updateData: Record<string, unknown>,
   ) => {
     const headers = buildHeaders();
     // Combine the item_id with the update data into one payload object
@@ -78,7 +78,7 @@ export const useItemsApi = () => {
   const transfer = async (
     item_id1: string | number,
     item_id2: string | number,
-    amount: string | number
+    amount: string | number,
   ) => {
     const headers = buildHeaders();
     // Combine the item_id with the update data into one payload object
@@ -90,5 +90,30 @@ export const useItemsApi = () => {
     return response;
   };
 
-  return { getItems, createItem, updateItem, deleteItem, transfer };
+  const purchaseItem = async (
+    item_id: string | number,
+    purchaseData: Record<string, unknown>,
+  ) => {
+    const headers = buildHeaders();
+    const response = await api.post(
+      `/items/${item_id}/purchase`,
+      purchaseData,
+      {
+        headers,
+      },
+    );
+    if (response.data?.accessToken) {
+      auth?.updateAccessTokenMem(response.data.accessToken);
+    }
+    return response;
+  };
+
+  return {
+    getItems,
+    createItem,
+    updateItem,
+    deleteItem,
+    transfer,
+    purchaseItem,
+  };
 };
