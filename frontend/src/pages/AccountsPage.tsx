@@ -7,8 +7,8 @@ interface Account {
   item_id: number;
   category_id: string | null;
   name: string;
-  balance: number;
-  goal?: number;
+  allocatedAmount: number;
+  targetAmount?: number;
   // additional properties as needed
 }
 
@@ -66,7 +66,10 @@ const AccountsPage: React.FC = () => {
                   {mainAccount.name || "Main Account"}
                 </h2>
                 <p style={styles.accountBalance}>
-                  ${parseFloat(mainAccount.balance.toString()).toFixed(2)}
+                  $
+                  {parseFloat(mainAccount.allocatedAmount.toString()).toFixed(
+                    2,
+                  )}
                 </p>
               </div>
             )}
@@ -78,11 +81,17 @@ const AccountsPage: React.FC = () => {
                   <div key={account.item_id} style={styles.accountCard}>
                     <h3 style={styles.accountTitle}>{account.name}</h3>
                     <p style={styles.accountBalance}>
-                      ${parseFloat(account.balance.toString()).toFixed(2)}
-                      {account.goal && (
+                      $
+                      {parseFloat(account.allocatedAmount.toString()).toFixed(
+                        2,
+                      )}
+                      {account.targetAmount && (
                         <span>
                           {" "}
-                          / ${parseFloat(account.goal.toString()).toFixed(2)}
+                          / $
+                          {parseFloat(account.targetAmount.toString()).toFixed(
+                            2,
+                          )}
                         </span>
                       )}
                     </p>
@@ -160,7 +169,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 600,
     marginBottom: "10px",
   },
-  accountBalance: {
+  accountAllocated: {
     fontSize: "20px",
     fontWeight: 700,
     color: "#28a745",

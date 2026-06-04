@@ -29,9 +29,9 @@ const HomePage: React.FC = () => {
   // State for all accounts (used to compute category sums)
   const [allAccounts, setAllAccounts] = useState<any[]>([]);
 
-  // State to hold the sum of balances for each category
+  // State to hold the sum of allocated amounts for each category
   const [categorySums, setCategorySums] = useState<{ [key: number]: number }>(
-    {}
+    {},
   );
 
   // Options dropdown state for each category card
@@ -54,7 +54,7 @@ const HomePage: React.FC = () => {
 
   // Delete confirmation popup state
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(
-    null
+    null,
   );
 
   const fetchCategories = async () => {
@@ -115,11 +115,11 @@ const HomePage: React.FC = () => {
     categories.forEach((cat: any) => {
       // Assume each account has a property category_id
       const accountsForCat = allAccounts.filter(
-        (acc) => acc.category_id === cat.category_id
+        (acc) => acc.category_id === cat.category_id,
       );
       const sum = accountsForCat.reduce(
-        (accum, account) => accum + Number(account.balance),
-        0
+        (accum, account) => accum + Number(account.allocatedAmount),
+        0,
       );
       sums[cat.category_id] = sum;
     });
@@ -159,8 +159,8 @@ const HomePage: React.FC = () => {
           prev.map((cat) =>
             cat.category_id === categoryToUpdate.category_id
               ? { ...cat, ...updatedData }
-              : cat
-          )
+              : cat,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -206,12 +206,12 @@ const HomePage: React.FC = () => {
   // Delete a category directly if no accounts exist
   const handleDeleteCategory = async (
     category_id: string | number,
-    options?: any
+    options?: any,
   ) => {
     try {
       await deleteCategory(category_id, options);
       setCategories((prev) =>
-        prev.filter((cat) => cat.category_id !== category_id)
+        prev.filter((cat) => cat.category_id !== category_id),
       );
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -294,7 +294,7 @@ const HomePage: React.FC = () => {
           ) : mainAccount ? (
             <div style={styles.mainAccountCard}>
               <p style={styles.mainAccountBalance}>
-                ${parseFloat(mainAccount.balance).toFixed(2)}
+                ${parseFloat(mainAccount.allocatedAmount).toFixed(2)}
               </p>
             </div>
           ) : (
@@ -354,7 +354,7 @@ const HomePage: React.FC = () => {
                       setActiveOptions(
                         activeOptions === cat.category_id
                           ? null
-                          : cat.category_id
+                          : cat.category_id,
                       )
                     }
                   >
@@ -588,7 +588,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
     display: "inline-block",
   },
-  mainAccountBalance: {
+  mainAccountAllocated: {
     fontSize: "28px",
     fontWeight: 700,
     color: "#2e7d32",
