@@ -3,6 +3,7 @@ import {
   verifyLogin,
   postUser,
   removeRefreshTokenDB,
+  verifyRefreshToken,
   updateUser,
   deleteUser,
 } from "../db/userDB.js";
@@ -123,8 +124,20 @@ router.get("/session", async (req, res) => {
   try {
     console.log("🔑 Verifying session token...");
     const user = jwt.verify(token, process.env.REFRESH_TOKEN);
+    const matchingUsers = await verifyRefreshToken(token);
+    const activeUser = matchingUsers?.[0];
+    if (!activeUser || activeUser.softDeleted) {
+      return res.status(401).json({ error: "No active session" });
+    }
+    const userDetails = {
+      user_id: activeUser.user_id,
+      email: activeUser.email,
+      f_name: activeUser.f_name,
+      l_name: activeUser.l_name,
+    };
+    const accessToken = generateAccessToken(userDetails);
     console.log("✅ User found:", user);
-    res.json(user);
+    res.json({ userDetails, accessToken });
   } catch (error) {
     console.log("❌ Invalid session!", error.message);
     return res.status(403).json({ error: "Invalid session" });

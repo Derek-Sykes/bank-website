@@ -27,14 +27,15 @@ interface AuthContextType {
     email: string,
     password: string,
     f_name: string,
-    l_name: string
+    l_name: string,
   ) => Promise<void>;
   updateAccessTokenMem: (At: string) => void;
+  updateUserMem: (updatedUser: User | null) => void;
 }
 
 // Create the context
 export const AuthContext = createContext<AuthContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -54,8 +55,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const response = await getUserSession();
         console.log("✅ Session Restored:", response.data); // ✅ Check response
 
-        if (response.data) {
-          setUser(response.data); // ✅ Restore user session
+        if (response.data?.userDetails) {
+          setUser(response.data.userDetails); // ✅ Restore user session
+          setAccessToken(response.data.accessToken);
         }
       } catch (error: unknown) {
         if (error instanceof Error) {
@@ -63,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         } else {
           console.error(
             "❌ Session check failed with an unknown error:",
-            error
+            error,
           );
         }
         setUser(null);
@@ -92,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       ) {
         console.error(
           "No user details or access token in response:",
-          response.data
+          response.data,
         );
         return;
       }
@@ -102,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       console.log("User set in context:", response.data.userDetails);
       console.log(
         "✅ Access Token Stored in Memory:",
-        response.data.accessToken
+        response.data.accessToken,
       );
     } catch (error: unknown) {
       if (error instanceof AxiosError) {
@@ -125,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     email: string,
     password: string,
     f_name: string,
-    l_name: string
+    l_name: string,
   ) => {
     await registerUser(email, password, f_name, l_name);
     await login(email, password);
@@ -133,6 +135,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateAccessTokenMem = (At: string) => {
     setAccessToken(At);
     console.log("should have updated at: ", At);
+  };
+
+  const updateUserMem = (updatedUser: User | null) => {
+    setUser(updatedUser);
   };
 
   return (
@@ -145,6 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         logout,
         register,
         updateAccessTokenMem,
+        updateUserMem,
       }}
     >
       {children}

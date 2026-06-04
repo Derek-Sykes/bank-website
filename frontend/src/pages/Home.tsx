@@ -31,7 +31,7 @@ const HomePage: React.FC = () => {
 
   // State to hold the sum of balances for each category
   const [categorySums, setCategorySums] = useState<{ [key: number]: number }>(
-    {}
+    {},
   );
 
   // Options dropdown state for each category card
@@ -54,7 +54,7 @@ const HomePage: React.FC = () => {
 
   // Delete confirmation popup state
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(
-    null
+    null,
   );
 
   const fetchCategories = async () => {
@@ -115,11 +115,11 @@ const HomePage: React.FC = () => {
     categories.forEach((cat: any) => {
       // Assume each account has a property category_id
       const accountsForCat = allAccounts.filter(
-        (acc) => acc.category_id === cat.category_id
+        (acc) => acc.category_id === cat.category_id,
       );
       const sum = accountsForCat.reduce(
         (accum, account) => accum + Number(account.balance),
-        0
+        0,
       );
       sums[cat.category_id] = sum;
     });
@@ -159,8 +159,8 @@ const HomePage: React.FC = () => {
           prev.map((cat) =>
             cat.category_id === categoryToUpdate.category_id
               ? { ...cat, ...updatedData }
-              : cat
-          )
+              : cat,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -206,12 +206,12 @@ const HomePage: React.FC = () => {
   // Delete a category directly if no accounts exist
   const handleDeleteCategory = async (
     category_id: string | number,
-    options?: any
+    options?: any,
   ) => {
     try {
       await deleteCategory(category_id, options);
       setCategories((prev) =>
-        prev.filter((cat) => cat.category_id !== category_id)
+        prev.filter((cat) => cat.category_id !== category_id),
       );
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -264,6 +264,11 @@ const HomePage: React.FC = () => {
             <li style={styles.navItem}>
               <Link to="/about" style={styles.navLink}>
                 About
+              </Link>
+            </li>
+            <li style={styles.navItem}>
+              <Link to="/settings" style={styles.navLink}>
+                Account/Profile
               </Link>
             </li>
             <li style={styles.navItem}>
@@ -354,7 +359,7 @@ const HomePage: React.FC = () => {
                       setActiveOptions(
                         activeOptions === cat.category_id
                           ? null
-                          : cat.category_id
+                          : cat.category_id,
                       )
                     }
                   >
