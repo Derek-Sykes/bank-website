@@ -7,6 +7,10 @@ import {
   updateCategory,
   deleteCategory,
 } from "./../db/categoryDB.js";
+import {
+  ACTIVITY_TYPES,
+  logActivity,
+} from "../src/services/activityService.js";
 
 router.get("/test", (req, res) => {
   res.send("Hello, World!");
@@ -33,7 +37,13 @@ router
 
     const category = { name, description, user_id };
     let feedback = await postCategory(category);
-    if (feedback === 1) {
+    if (Number.isInteger(feedback)) {
+      await logActivity({
+        user_id,
+        type: ACTIVITY_TYPES.CATEGORY_CREATED,
+        category_id: feedback,
+        metadata: { name, description },
+      });
       res.status(200).send("Successful post");
     } else {
       res.status(400).send("Error posting");
@@ -46,6 +56,12 @@ router
     if (error) {
       res.status(400).send("Error updating category, see console.");
     } else {
+      await logActivity({
+        user_id,
+        type: ACTIVITY_TYPES.CATEGORY_UPDATED,
+        category_id,
+        metadata: { name, description },
+      });
       res.status(200).send("Category updated");
     }
   })

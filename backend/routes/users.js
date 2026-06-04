@@ -14,6 +14,10 @@ import {
 import { authenticateToken } from "../middleware/authenticateToken.js";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken"; // ✅ Ensure jsonwebtoken is imported
+import {
+  ACTIVITY_TYPES,
+  logActivity,
+} from "../src/services/activityService.js";
 
 dotenv.config();
 
@@ -140,12 +144,24 @@ router
     if (error) {
       res.status(400).send(error);
     } else {
+      if (user.password) {
+        await logActivity({
+          user_id,
+          type: ACTIVITY_TYPES.PASSWORD_CHANGED,
+          metadata: { email: user.email },
+        });
+      }
       res.status(200).json({ message: "User updated successfully" });
     }
   })
   .delete(authenticateToken, async (req, res) => {
     let user = req.body;
     let user_id = req.user.user_id;
+    await logActivity({
+      user_id,
+      type: ACTIVITY_TYPES.ACCOUNT_SOFT_DELETED,
+      metadata: { requestedUserId: user?.user_id },
+    });
     let error = await deleteUser(user, user_id);
     if (error) {
       res.status(400).send(error);

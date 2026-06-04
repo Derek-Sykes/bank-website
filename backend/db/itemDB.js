@@ -30,14 +30,14 @@ export async function postItem(item) {
     user_id,
   );
   try {
-    await pool.query(
+    const [result] = await pool.query(
       `
             INSERT INTO item (name, description, cost, balance, category_id, user_id)
             VALUES (?, ?, ?, ?, ?, ?)
             `,
       [name, description, cost, balance, category_id, user_id],
     );
-    return 1;
+    return result.insertId;
   } catch (error) {
     let errno = error.errno;
     switch (errno) {

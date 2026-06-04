@@ -3,6 +3,7 @@ import userRoutes from "./routes/users.js";
 import cors from "cors"; // Import the CORS package
 import itemRoutes from "./routes/items.js";
 import categoryRoutes from "./routes/category.js";
+import activityRoutes from "./routes/activity.js";
 import cookieParser from "cookie-parser";
 import { authenticateToken } from "./middleware/authenticateToken.js";
 
@@ -29,6 +30,7 @@ app.use("/users", userRoutes);
 app.use(authenticateToken);
 app.use("/items", itemRoutes);
 app.use("/categorys", categoryRoutes);
+app.use("/activity", activityRoutes);
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);

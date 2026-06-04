@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  userId       Int           @id @default(autoincrement()) @map("user_id")
+  firstName    String?       @map("f_name") @db.VarChar(45)
+  lastName     String?       @map("l_name") @db.VarChar(45)
+  email        String        @unique(map: "email_UNIQUE") @db.VarChar(90)
+  password     String        @db.VarChar(60)
+  refreshToken String?       @map("refresh_token") @db.VarChar(255)
+  categories   Category[]
+  items        Item[]
+  activityLogs ActivityLog[]
+
+  @@map("user")
+}
+
+model Category {
+  categoryId   Int           @id @default(autoincrement()) @map("category_id")
+  name         String        @db.VarChar(45)
+  description  String?       @db.VarChar(200)
+  userId       Int?          @map("user_id")
+  user         User?         @relation(fields: [userId], references: [userId], onDelete: Cascade, map: "fc_user_id")
+  items        Item[]
+  activityLogs ActivityLog[]
+
+  @@index([userId], map: "user_id_idx")
+  @@map("category")
+}
+
+model Item {
+  itemId       Int           @id @default(autoincrement()) @map("item_id")
+  name         String        @db.VarChar(45)
+  description  String?       @db.VarChar(200)
+  cost         Float?
+  balance      Float?        @default(0)
+  categoryId   Int?          @map("category_id")
+  userId       Int?          @map("user_id")
+  category     Category?     @relation(fields: [categoryId], references: [categoryId], onDelete: Cascade, map: "category_id")
+  user         User?         @relation(fields: [userId], references: [userId], onDelete: Cascade, map: "ic_user_id")
+  activityLogs ActivityLog[]
+
+  @@index([categoryId], map: "category_id_idx")
+  @@index([userId], map: "user_id_idx")
+  @@map("item")
+}
+
+model ActivityLog {
+  activityLogId Int      @id @default(autoincrement()) @map("activity_log_id")
+  userId        Int      @map("user_id")
+  type          String   @db.VarChar(45)
+  amount        Float?
+  categoryId    Int?     @map("category_id")
+  itemId        Int?     @map("item_id")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user          User     @relation(fields: [userId], references: [userId], onDelete: Cascade, map: "activity_log_user_id")
+  category      Category? @relation(fields: [categoryId], references: [categoryId], onDelete: SetNull, map: "activity_log_category_id")
+  item          Item?    @relation(fields: [itemId], references: [itemId], onDelete: SetNull, map: "activity_log_item_id")
+
+  @@index([userId], map: "activity_log_user_id_idx")
+  @@index([categoryId], map: "activity_log_category_id_idx")
+  @@index([itemId], map: "activity_log_item_id_idx")
+  @@index([type], map: "activity_log_type_idx")
+  @@map("activity_log")
+}
