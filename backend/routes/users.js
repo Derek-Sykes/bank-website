@@ -6,7 +6,7 @@ import {
   updateUser,
   deleteUser,
 } from "../db/userDB.js";
-import { postItem } from "../db/itemDB.js";
+import { postAccount } from "../db/accountDB.js";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -62,15 +62,10 @@ router.post("/register", async (req, res) => {
       res.status(400).send(error);
     } else {
       let userDetails = await verifyLogin(user);
-      const mainAcct = {
-        name: "Main Account",
-        description: "Main Account",
-        cost: null,
-        balance: 5000,
-        category_id: null,
-        user_id: userDetails.user_id,
-      };
-      await postItem(mainAcct);
+      const accountError = await postAccount(userDetails.user_id, 5000);
+      if (accountError) {
+        return res.status(500).send("Error creating main account");
+      }
       const accessToken = generateAccessToken({
         user_id: userDetails.user_id,
         email: userDetails.email,

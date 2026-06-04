@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useContext, useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useItemsApi } from "../api_requests/items";
@@ -85,7 +86,7 @@ const CategoryPage: React.FC = () => {
     if (itemToUpdate) {
       if (updateCost < itemToUpdate.balance) {
         setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
+          "Cost cannot be lower than balance. Please move money out of this account first.",
         );
         return;
       }
@@ -101,8 +102,8 @@ const CategoryPage: React.FC = () => {
           prev.map((item) =>
             item.item_id === itemToUpdate.item_id
               ? { ...item, ...updatedData }
-              : item
-          )
+              : item,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -153,25 +154,13 @@ const CategoryPage: React.FC = () => {
 
   // New function: Delete an account with auto-transfer if it has a balance.
   const handleDeleteAccount = async (account: any) => {
-    // If account has a non-zero balance, automatically transfer its funds to the main account.
+    // If account has a non-zero balance, automatically transfer its funds to the dedicated main account.
     if (Number(account.balance) > 0) {
       try {
-        // Get main account by calling getItems with category_id = null.
-        const response = await getItems({ type: "category_id", value: null });
-        if (
-          response &&
-          Array.isArray(response.data) &&
-          response.data.length > 0
-        ) {
-          const mainAccount = response.data[0];
-          // Transfer funds: from the account to be deleted (account.item_id) to the main account.
-          await transfer(account.item_id, mainAccount.item_id, account.balance);
-          console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
-          );
-        } else {
-          console.error("Main account not found. Cannot transfer funds.");
-        }
+        await transfer(account.item_id, "main", account.balance);
+        console.log(
+          `Transferred $${account.balance} from account ${account.item_id} to main account`,
+        );
       } catch (error) {
         console.error("Error during transfer:", error);
         return; // Stop deletion if transfer fails.
@@ -181,7 +170,7 @@ const CategoryPage: React.FC = () => {
     try {
       await deleteItem(account.item_id);
       setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
+        prev.filter((item) => item.item_id !== account.item_id),
       );
     } catch (error) {
       console.error("Error deleting account:", error);
@@ -228,7 +217,7 @@ const CategoryPage: React.FC = () => {
                   style={styles.optionsButton}
                   onClick={() =>
                     setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
+                      activeOptions === item.item_id ? null : item.item_id,
                     )
                   }
                 >

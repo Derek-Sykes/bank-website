@@ -2,21 +2,30 @@ import React, { useState, useEffect, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import { useItemsApi } from "../api_requests/items";
+import { useAccountsApi } from "../api_requests/accounts";
 
 interface Account {
   item_id: number;
-  category_id: string | null;
+  category_id: string | number | null;
   name: string;
   balance: number;
   goal?: number;
-  // additional properties as needed
+}
+
+interface MainAccount {
+  account_id: number;
+  id: "main";
+  name: string;
+  balance: number;
 }
 
 const AccountsPage: React.FC = () => {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
   const { getItems } = useItemsApi();
+  const { getAccount } = useAccountsApi();
 
+  const [mainAccount, setMainAccount] = useState<MainAccount | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,9 +34,15 @@ const AccountsPage: React.FC = () => {
     const fetchAccounts = async () => {
       setLoading(true);
       try {
-        const response = await getItems();
-        if (response && response.data) {
-          setAccounts(response.data);
+        const [mainResponse, itemsResponse] = await Promise.all([
+          getAccount(),
+          getItems(),
+        ]);
+        if (mainResponse && mainResponse.data) {
+          setMainAccount(mainResponse.data);
+        }
+        if (itemsResponse && itemsResponse.data) {
+          setAccounts(itemsResponse.data);
         }
       } catch (error) {
         console.error("Error fetching accounts:", error);
@@ -39,9 +54,6 @@ const AccountsPage: React.FC = () => {
     fetchAccounts();
   }, [auth?.accessToken]);
 
-  // Main account is assumed to have category_id === null
-  const mainAccount = accounts.find((acc) => acc.category_id === null);
-  // Mini accounts are those with a non-null category
   const miniAccounts = accounts.filter((acc) => acc.category_id !== null);
 
   return (

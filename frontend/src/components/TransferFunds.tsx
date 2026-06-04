@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useItemsApi } from "../api_requests/items";
+import { useAccountsApi } from "../api_requests/accounts";
 
 interface Account {
-  item_id: number;
+  transfer_id: string | number;
   name: string;
   balance: number;
-  // add other properties as needed
+}
+
+interface RawItemAccount {
+  item_id: string | number;
+  category_id: string | number | null;
+  name: string;
+  balance: string | number;
 }
 
 interface TransferFundsProps {
@@ -18,6 +25,7 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
   onTransferSuccess,
 }) => {
   const { transfer, getItems } = useItemsApi();
+  const { getAccount } = useAccountsApi();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fromAccount, setFromAccount] = useState<string>("");
@@ -30,9 +38,23 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
     async function fetchAccounts() {
       setLoading(true);
       try {
-        const response = await getItems();
-        // Assume response.data is an array of accounts
-        setAccounts(response.data);
+        const [mainResponse, itemsResponse] = await Promise.all([
+          getAccount(),
+          getItems(),
+        ]);
+        const mainAccount = {
+          transfer_id: "main",
+          name: mainResponse.data.name || "Main Account",
+          balance: Number(mainResponse.data.balance),
+        };
+        const miniAccounts = (itemsResponse.data as RawItemAccount[])
+          .filter((account) => account.category_id !== null)
+          .map((account) => ({
+            transfer_id: account.item_id,
+            name: account.name,
+            balance: Number(account.balance),
+          }));
+        setAccounts([mainAccount, ...miniAccounts]);
       } catch (err) {
         console.error(err);
         setError("Error loading accounts.");
@@ -62,7 +84,7 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
     }
     // Check if selected from-account has sufficient funds.
     const selectedFrom = accounts.find(
-      (acc) => acc.item_id === Number(fromAccount)
+      (acc) => String(acc.transfer_id) === fromAccount,
     );
     if (selectedFrom && selectedFrom.balance < numericAmount) {
       setError("Insufficient funds in the selected 'from' account.");
@@ -70,7 +92,7 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
     }
 
     try {
-      await transfer(Number(fromAccount), Number(toAccount), numericAmount);
+      await transfer(fromAccount, toAccount, numericAmount);
       if (onTransferSuccess) onTransferSuccess();
       onClose();
     } catch (err) {
@@ -96,7 +118,7 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
               >
                 <option value="">Select account</option>
                 {accounts.map((account) => (
-                  <option key={account.item_id} value={account.item_id}>
+                  <option key={account.transfer_id} value={account.transfer_id}>
                     {account.name} (Balance: ${account.balance.toFixed(2)})
                   </option>
                 ))}
@@ -111,7 +133,7 @@ const TransferFunds: React.FC<TransferFundsProps> = ({
               >
                 <option value="">Select account</option>
                 {accounts.map((account) => (
-                  <option key={account.item_id} value={account.item_id}>
+                  <option key={account.transfer_id} value={account.transfer_id}>
                     {account.name} (Balance: ${account.balance.toFixed(2)})
                   </option>
                 ))}

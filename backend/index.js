@@ -3,6 +3,7 @@ import userRoutes from "./routes/users.js";
 import cors from "cors"; // Import the CORS package
 import itemRoutes from "./routes/items.js";
 import categoryRoutes from "./routes/category.js";
+import accountRoutes from "./routes/accounts.js";
 import cookieParser from "cookie-parser";
 import { authenticateToken } from "./middleware/authenticateToken.js";
 
@@ -28,6 +29,7 @@ app.use("/users", userRoutes);
 // any routes from here down are protected
 app.use(authenticateToken);
 app.use("/items", itemRoutes);
+app.use("/accounts", accountRoutes);
 app.use("/categorys", categoryRoutes);
 
 app.listen(port, "0.0.0.0", () => {
