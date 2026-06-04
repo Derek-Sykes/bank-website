@@ -1,15 +1,26 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useItemsApi } from "../api_requests/items";
+import { useCategoryApi } from "../api_requests/category";
 import { AuthContext } from "../../context/AuthContext";
 import { capitalize } from "../utils/generalUtils";
+
+interface Item {
+  item_id: number;
+  name: string;
+  description?: string;
+  cost?: number;
+  balance?: number;
+  category_id?: number;
+  user_id?: number;
+}
 
 interface Category {
   category_id: number;
   name: string;
   description: string;
   user_id: number;
-  // any other properties...
+  unallocated_balance?: number;
 }
 
 const CategoryPage: React.FC = () => {
@@ -21,14 +32,18 @@ const CategoryPage: React.FC = () => {
   // Destructure transfer along with other API functions.
   const { getItems, createItem, updateItem, deleteItem, transfer } =
     useItemsApi();
+  const { allocateUnallocatedFunds } = useCategoryApi();
 
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [unallocatedBalance, setUnallocatedBalance] = useState<number>(
+    Number(category.unallocated_balance ?? 0),
+  );
   const [loadingItems, setLoadingItems] = useState(true);
   // For the options dropdown on each account
   const [activeOptions, setActiveOptions] = useState<number | null>(null);
 
   // Update modal state
-  const [itemToUpdate, setItemToUpdate] = useState<any | null>(null);
+  const [itemToUpdate, setItemToUpdate] = useState<Item | null>(null);
   const [updateName, setUpdateName] = useState("");
   const [updateCost, setUpdateCost] = useState<number>(0);
   const [updateDescription, setUpdateDescription] = useState("");
@@ -40,6 +55,17 @@ const CategoryPage: React.FC = () => {
   const [newCost, setNewCost] = useState<number>(100);
   const [newDescription, setNewDescription] = useState("");
   const [createError, setCreateError] = useState("");
+
+  // Allocate unassigned funds modal state
+  const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
+  const [allocationMode, setAllocationMode] = useState<"amount" | "percentage">(
+    "amount",
+  );
+  const [allocationValues, setAllocationValues] = useState<
+    Record<number, string>
+  >({});
+  const [allocationError, setAllocationError] = useState("");
+  const [allocationSuccess, setAllocationSuccess] = useState("");
 
   const fetchItems = async () => {
     setLoadingItems(true);
@@ -63,11 +89,90 @@ const CategoryPage: React.FC = () => {
     fetchItems();
   }, [auth?.accessToken]);
 
+  const activeItems = items.filter(
+    (item) => Number(item.balance ?? 0) < Number(item.cost ?? 0),
+  );
+
+  const openAllocateModal = () => {
+    const initialValues = activeItems.reduce<Record<number, string>>(
+      (values, item) => {
+        values[item.item_id] = "";
+        return values;
+      },
+      {},
+    );
+    setAllocationValues(initialValues);
+    setAllocationMode("amount");
+    setAllocationError("");
+    setAllocationSuccess("");
+    setIsAllocateModalOpen(true);
+  };
+
+  const closeAllocateModal = () => {
+    setIsAllocateModalOpen(false);
+    setAllocationError("");
+  };
+
+  const handleAllocationValueChange = (itemId: number, value: string) => {
+    setAllocationValues((prev) => ({ ...prev, [itemId]: value }));
+  };
+
+  const handleSubmitAllocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAllocationError("");
+    setAllocationSuccess("");
+
+    const entries = Object.entries(allocationValues)
+      .map(([item_id, value]) => ({
+        item_id: Number(item_id),
+        value: Number(value),
+      }))
+      .filter((entry) => Number.isFinite(entry.value) && entry.value > 0);
+
+    if (!entries.length) {
+      setAllocationError("Enter at least one allocation greater than zero.");
+      return;
+    }
+
+    const payload =
+      allocationMode === "amount"
+        ? {
+            allocations: entries.map((entry) => ({
+              item_id: entry.item_id,
+              amount: entry.value,
+            })),
+          }
+        : {
+            percentages: entries.map((entry) => ({
+              item_id: entry.item_id,
+              percentage: entry.value,
+            })),
+          };
+
+    try {
+      const response = await allocateUnallocatedFunds(
+        category.category_id,
+        payload,
+      );
+      setUnallocatedBalance(Number(response.data.unallocated_balance));
+      setAllocationSuccess(
+        `Allocated $${Number(response.data.allocated_total).toFixed(2)}.`,
+      );
+      await fetchItems();
+      closeAllocateModal();
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: { error?: string } } };
+      setAllocationError(
+        apiError.response?.data?.error || "Error allocating unassigned funds.",
+      );
+    }
+  };
+
   // Opens the update modal and pre-fills form with current data
-  const openUpdateModal = (item: any) => {
+  const openUpdateModal = (item: Item) => {
     setItemToUpdate(item);
     setUpdateName(item.name);
-    setUpdateCost(item.cost);
+    setUpdateCost(Number(item.cost ?? 0));
     setUpdateDescription(item.description || "");
     setUpdateError("");
     setActiveOptions(null); // Close the options dropdown if open
@@ -83,9 +188,9 @@ const CategoryPage: React.FC = () => {
   const handleSubmitUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (itemToUpdate) {
-      if (updateCost < itemToUpdate.balance) {
+      if (updateCost < Number(itemToUpdate.balance ?? 0)) {
         setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
+          "Cost cannot be lower than balance. Please move money out of this account first.",
         );
         return;
       }
@@ -101,8 +206,8 @@ const CategoryPage: React.FC = () => {
           prev.map((item) =>
             item.item_id === itemToUpdate.item_id
               ? { ...item, ...updatedData }
-              : item
-          )
+              : item,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -152,7 +257,7 @@ const CategoryPage: React.FC = () => {
   };
 
   // New function: Delete an account with auto-transfer if it has a balance.
-  const handleDeleteAccount = async (account: any) => {
+  const handleDeleteAccount = async (account: Item) => {
     // If account has a non-zero balance, automatically transfer its funds to the main account.
     if (Number(account.balance) > 0) {
       try {
@@ -165,9 +270,13 @@ const CategoryPage: React.FC = () => {
         ) {
           const mainAccount = response.data[0];
           // Transfer funds: from the account to be deleted (account.item_id) to the main account.
-          await transfer(account.item_id, mainAccount.item_id, account.balance);
+          await transfer(
+            account.item_id,
+            mainAccount.item_id,
+            Number(account.balance ?? 0),
+          );
           console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
+            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`,
           );
         } else {
           console.error("Main account not found. Cannot transfer funds.");
@@ -181,7 +290,7 @@ const CategoryPage: React.FC = () => {
     try {
       await deleteItem(account.item_id);
       setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
+        prev.filter((item) => item.item_id !== account.item_id),
       );
     } catch (error) {
       console.error("Error deleting account:", error);
@@ -207,6 +316,26 @@ const CategoryPage: React.FC = () => {
         <button style={styles.actionButton} onClick={openCreateModal}>
           Create New Account
         </button>
+        <button
+          style={styles.secondaryActionButton}
+          onClick={openAllocateModal}
+          disabled={unallocatedBalance <= 0 || activeItems.length === 0}
+          title={
+            activeItems.length === 0
+              ? "No active accounts need funding"
+              : "Allocate unassigned category funds"
+          }
+        >
+          Allocate Unassigned Funds
+        </button>
+      </section>
+
+      <section style={styles.unallocatedSummary}>
+        <strong>Unassigned category funds:</strong> $
+        {unallocatedBalance.toFixed(2)}
+        {allocationSuccess && (
+          <span style={styles.successText}> {allocationSuccess}</span>
+        )}
       </section>
 
       <main style={styles.mainContent}>
@@ -228,7 +357,7 @@ const CategoryPage: React.FC = () => {
                   style={styles.optionsButton}
                   onClick={() =>
                     setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
+                      activeOptions === item.item_id ? null : item.item_id,
                     )
                   }
                 >
@@ -385,6 +514,73 @@ const CategoryPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Allocate Unassigned Funds Modal */}
+      {isAllocateModalOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h2 style={styles.modalTitle}>Allocate Unassigned Funds</h2>
+            <p style={styles.helperText}>
+              Available: ${unallocatedBalance.toFixed(2)}. Enter manual dollar
+              amounts or percentages for active accounts only.
+            </p>
+            <form onSubmit={handleSubmitAllocation}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Allocation method:</label>
+                <select
+                  value={allocationMode}
+                  onChange={(e) =>
+                    setAllocationMode(e.target.value as "amount" | "percentage")
+                  }
+                  style={styles.inputField}
+                >
+                  <option value="amount">Dollar amounts</option>
+                  <option value="percentage">Percentages</option>
+                </select>
+              </div>
+
+              {activeItems.map((item) => (
+                <div key={item.item_id} style={styles.formGroup}>
+                  <label style={styles.label}>
+                    {item.name} (needs $
+                    {(
+                      Number(item.cost ?? 0) - Number(item.balance ?? 0)
+                    ).toFixed(2)}
+                    )
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={allocationValues[item.item_id] ?? ""}
+                    onChange={(e) =>
+                      handleAllocationValueChange(item.item_id, e.target.value)
+                    }
+                    placeholder={allocationMode === "amount" ? "0.00" : "0"}
+                    style={styles.inputField}
+                  />
+                </div>
+              ))}
+
+              {allocationError && (
+                <p style={styles.errorText}>{allocationError}</p>
+              )}
+              <div style={styles.modalButtons}>
+                <button type="submit" style={styles.modalButton}>
+                  Allocate
+                </button>
+                <button
+                  type="button"
+                  style={styles.modalButton}
+                  onClick={closeAllocateModal}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -427,7 +623,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   topButtons: {
     display: "flex",
     justifyContent: "center",
-    marginBottom: "30px",
+    gap: "15px",
+    marginBottom: "20px",
   },
   actionButton: {
     backgroundColor: "#388e3c",
@@ -438,6 +635,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     cursor: "pointer",
     fontSize: "16px",
     transition: "background-color 0.3s ease",
+  },
+
+  secondaryActionButton: {
+    backgroundColor: "#6a1b9a",
+    color: "#fff",
+    border: "none",
+    padding: "12px 20px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "16px",
+    transition: "background-color 0.3s ease",
+  },
+  unallocatedSummary: {
+    backgroundColor: "#f3e5f5",
+    borderRadius: "8px",
+    color: "#4a148c",
+    marginBottom: "25px",
+    padding: "14px 18px",
+    textAlign: "center",
+  },
+  successText: {
+    color: "#2e7d32",
+    marginLeft: "8px",
   },
   mainContent: {
     textAlign: "left",
@@ -570,6 +790,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: "1px solid #ccc",
     outline: "none",
     transition: "border-color 0.3s ease",
+  },
+  helperText: {
+    color: "#555",
+    fontSize: "14px",
+    lineHeight: 1.4,
   },
   errorText: {
     color: "#d32f2f",
