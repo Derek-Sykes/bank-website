@@ -7,11 +7,41 @@ import {
   updateItem,
   deleteItem,
   transfer,
+  cancelItem,
+  getActivityLogsByCategory,
 } from "./../db/itemDB.js";
 
 router.get("/test", (req, res) => {
   res.send("Hello, World!");
 });
+
+router.post("/:id/cancel", async (req, res) => {
+  const user_id = req.user.user_id;
+  const result = await cancelItem(req.params.id, user_id);
+
+  if (result instanceof Error) {
+    res.status(result.statusCode || 400).json({ message: result.message });
+  } else {
+    res.status(200).json(result);
+  }
+});
+
+router.get("/activity", async (req, res) => {
+  const user_id = req.user.user_id;
+  const { category_id } = req.query;
+
+  if (!category_id) {
+    return res.status(400).json({ message: "category_id is required" });
+  }
+
+  const activityLogs = await getActivityLogsByCategory(user_id, category_id);
+  if (activityLogs) {
+    res.status(200).json(activityLogs);
+  } else {
+    res.status(400).send("Error getting activity logs see console.");
+  }
+});
+
 // insert an item into the db with only the name being required as input
 router
   .route("/item")
