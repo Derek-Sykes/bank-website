@@ -1,40 +1,52 @@
-import mysql from "mysql2";
-import dotenv from "dotenv";
-dotenv.config();
+import { prisma } from "../lib/prisma.js";
 
-const pool = mysql
-  .createPool({
-    host: process.env.MYSQL_HOST,
-    user: process.env.MYSQL_USER,
-    password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
-  })
-  .promise();
+function toNumber(value) {
+  if (value === null || value === undefined) return value;
+  return Number(value);
+}
+
+function toLegacyCategory(category) {
+  if (!category) return null;
+  return {
+    category_id: category.id,
+    id: category.id,
+    user_id: category.userId,
+    userId: category.userId,
+    name: category.name,
+    description: category.description,
+    allocationPercent: toNumber(category.allocationPercent),
+    unallocatedBalance: toNumber(category.unallocatedBalance),
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+  };
+}
 
 export async function postCategory(category) {
-  let { name, description = null, user_id = null } = category;
+  const {
+    name,
+    description = null,
+    user_id = null,
+    allocationPercent = 0,
+    unallocatedBalance = 0,
+  } = category;
   console.log("CATEGORY spelled out: ", name, description, user_id);
   try {
-    await pool.query(
-      `
-            INSERT INTO category (name, description, user_id)
-            VALUES (?, ?, ?)
-            `,
-      [name, description, user_id],
-    );
+    await prisma.category.create({
+      data: {
+        name,
+        description,
+        userId: Number(user_id),
+        allocationPercent,
+        unallocatedBalance,
+      },
+    });
     return 1;
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      case 1048:
-        console.log("Name must have a value");
-        return "Name must have a value";
-      // space for more possible error codes from sql
-      default:
-        console.log("Error creating category: ", error);
-        break;
+    if (error.code === "P2011") {
+      console.log("Name must have a value");
+      return "Name must have a value";
     }
-    console.log(error);
+    console.log("Error creating category: ", error);
     return error;
   }
 }
@@ -42,42 +54,37 @@ export async function postCategory(category) {
 export async function getCategorys(user_id) {
   console.log("user_id: ", user_id);
 
-  const query = `SELECT * FROM category WHERE user_id = ?`;
-
   try {
-    let categorys = (await pool.query(query, [user_id]))[0];
+    const categorys = await prisma.category.findMany({
+      where: { userId: Number(user_id) },
+      orderBy: { createdAt: "asc" },
+    });
     console.log("categorys: ", categorys);
-    return categorys;
+    return categorys.map(toLegacyCategory);
   } catch (error) {
-    let errno = error.errno;
-    switch (errno) {
-      // placeholder
-      case 1048:
-        console.log("ERROR: ", error);
-        return null;
-      // space for more possible error codes from sql
-      default:
-        console.log("Error getting category: ", error);
-        return null;
-    }
+    console.log("Error getting category: ", error);
+    return null;
   }
 }
 
 export async function updateCategory(category_id, name, description, user_id) {
-  const query = `UPDATE category SET name = ?, description = ? WHERE category_id = ? && user_id = ?`;
-
   try {
-    await pool.query(query, [name, description, category_id, user_id]);
+    await prisma.category.updateMany({
+      where: { id: Number(category_id), userId: Number(user_id) },
+      data: { name, description },
+    });
     return null;
   } catch (error) {
     console.log(error);
     return error;
   }
 }
+
 export async function deleteCategory(category_id, user_id) {
-  const query = `DELETE FROM category WHERE category_id = ? && user_id = ?`;
   try {
-    await pool.query(query, [category_id, user_id]);
+    await prisma.category.deleteMany({
+      where: { id: Number(category_id), userId: Number(user_id) },
+    });
     return null;
   } catch (error) {
     console.log(error);

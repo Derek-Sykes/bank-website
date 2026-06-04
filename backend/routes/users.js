@@ -6,7 +6,6 @@ import {
   updateUser,
   deleteUser,
 } from "../db/userDB.js";
-import { postItem } from "../db/itemDB.js";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -62,15 +61,6 @@ router.post("/register", async (req, res) => {
       res.status(400).send(error);
     } else {
       let userDetails = await verifyLogin(user);
-      const mainAcct = {
-        name: "Main Account",
-        description: "Main Account",
-        cost: null,
-        balance: 5000,
-        category_id: null,
-        user_id: userDetails.user_id,
-      };
-      await postItem(mainAcct);
       const accessToken = generateAccessToken({
         user_id: userDetails.user_id,
         email: userDetails.email,
