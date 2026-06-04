@@ -26,11 +26,13 @@ CREATE TABLE `category` (
   `category_id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(45) NOT NULL,
   `description` varchar(200) DEFAULT NULL,
+  `allocation_percent` decimal(5,2) NOT NULL DEFAULT '0.00',
   `user_id` int DEFAULT NULL,
   PRIMARY KEY (`category_id`),
   UNIQUE KEY `category_id_UNIQUE` (`category_id`),
   KEY `user_id_idx` (`user_id`),
-  CONSTRAINT `fc_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE
+  CONSTRAINT `fc_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `category_allocation_percent_chk` CHECK ((`allocation_percent` >= 0) and (`allocation_percent` <= 100))
 ) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

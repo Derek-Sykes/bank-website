@@ -9,7 +9,15 @@ interface Category {
   name: string;
   description: string;
   user_id: number;
-  // any other properties...
+}
+
+interface Item {
+  item_id: number;
+  name: string;
+  description?: string;
+  cost: number;
+  balance: number;
+  category_id: number | null;
 }
 
 const CategoryPage: React.FC = () => {
@@ -22,13 +30,13 @@ const CategoryPage: React.FC = () => {
   const { getItems, createItem, updateItem, deleteItem, transfer } =
     useItemsApi();
 
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   // For the options dropdown on each account
   const [activeOptions, setActiveOptions] = useState<number | null>(null);
 
   // Update modal state
-  const [itemToUpdate, setItemToUpdate] = useState<any | null>(null);
+  const [itemToUpdate, setItemToUpdate] = useState<Item | null>(null);
   const [updateName, setUpdateName] = useState("");
   const [updateCost, setUpdateCost] = useState<number>(0);
   const [updateDescription, setUpdateDescription] = useState("");
@@ -64,7 +72,7 @@ const CategoryPage: React.FC = () => {
   }, [auth?.accessToken]);
 
   // Opens the update modal and pre-fills form with current data
-  const openUpdateModal = (item: any) => {
+  const openUpdateModal = (item: Item) => {
     setItemToUpdate(item);
     setUpdateName(item.name);
     setUpdateCost(item.cost);
@@ -85,7 +93,7 @@ const CategoryPage: React.FC = () => {
     if (itemToUpdate) {
       if (updateCost < itemToUpdate.balance) {
         setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
+          "Cost cannot be lower than balance. Please move money out of this account first.",
         );
         return;
       }
@@ -101,8 +109,8 @@ const CategoryPage: React.FC = () => {
           prev.map((item) =>
             item.item_id === itemToUpdate.item_id
               ? { ...item, ...updatedData }
-              : item
-          )
+              : item,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -152,7 +160,7 @@ const CategoryPage: React.FC = () => {
   };
 
   // New function: Delete an account with auto-transfer if it has a balance.
-  const handleDeleteAccount = async (account: any) => {
+  const handleDeleteAccount = async (account: Item) => {
     // If account has a non-zero balance, automatically transfer its funds to the main account.
     if (Number(account.balance) > 0) {
       try {
@@ -167,7 +175,7 @@ const CategoryPage: React.FC = () => {
           // Transfer funds: from the account to be deleted (account.item_id) to the main account.
           await transfer(account.item_id, mainAccount.item_id, account.balance);
           console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
+            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`,
           );
         } else {
           console.error("Main account not found. Cannot transfer funds.");
@@ -181,7 +189,7 @@ const CategoryPage: React.FC = () => {
     try {
       await deleteItem(account.item_id);
       setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
+        prev.filter((item) => item.item_id !== account.item_id),
       );
     } catch (error) {
       console.error("Error deleting account:", error);
@@ -228,7 +236,7 @@ const CategoryPage: React.FC = () => {
                   style={styles.optionsButton}
                   onClick={() =>
                     setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
+                      activeOptions === item.item_id ? null : item.item_id,
                     )
                   }
                 >

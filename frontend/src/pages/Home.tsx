@@ -1,4 +1,5 @@
 import React, { useState, useContext, useEffect } from "react";
+import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import { capitalize } from "../utils/generalUtils";
@@ -6,11 +7,39 @@ import { useCategoryApi } from "../api_requests/category";
 import { useItemsApi } from "../api_requests/items";
 import TransferFunds from "../components/TransferFunds"; // Ensure correct path
 
+type Category = {
+  category_id: number;
+  name: string;
+  description?: string;
+  allocationPercent: number | string;
+};
+
+type Account = {
+  item_id: number;
+  balance: number | string;
+  category_id: number | null;
+};
+
 type ConfirmDelete = {
   category_id: number;
   categoryName: string;
-  accounts: any[];
+  accounts: Account[];
 };
+
+const getCategoryApiErrorMessage = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    return (
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      "Unable to save category."
+    );
+  }
+
+  return "Unable to save category.";
+};
+
+const toAllocationInput = (value: unknown) =>
+  value === null || value === undefined ? "" : String(value);
 
 const HomePage: React.FC = () => {
   const auth = useContext(AuthContext);
@@ -19,34 +48,43 @@ const HomePage: React.FC = () => {
     useCategoryApi();
   const { getItems } = useItemsApi();
 
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
   // State for the Main Account view
-  const [mainAccount, setMainAccount] = useState<any>(null);
+  const [mainAccount, setMainAccount] = useState<Account | null>(null);
   const [loadingMainAccount, setLoadingMainAccount] = useState(true);
 
   // State for all accounts (used to compute category sums)
-  const [allAccounts, setAllAccounts] = useState<any[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
 
   // State to hold the sum of balances for each category
   const [categorySums, setCategorySums] = useState<{ [key: number]: number }>(
-    {}
+    {},
   );
 
   // Options dropdown state for each category card
   const [activeOptions, setActiveOptions] = useState<number | null>(null);
 
   // Update modal state
-  const [categoryToUpdate, setCategoryToUpdate] = useState<any | null>(null);
+  const [categoryToUpdate, setCategoryToUpdate] = useState<Category | null>(
+    null,
+  );
   const [updateName, setUpdateName] = useState("");
   const [updateDescription, setUpdateDescription] = useState("");
+  const [updateAllocations, setUpdateAllocations] = useState<{
+    [key: number]: string;
+  }>({});
   const [updateError, setUpdateError] = useState("");
 
   // Create modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newAllocationPercent, setNewAllocationPercent] = useState("");
+  const [createAllocations, setCreateAllocations] = useState<{
+    [key: number]: string;
+  }>({});
   const [createError, setCreateError] = useState("");
 
   // Transfer modal state
@@ -54,7 +92,7 @@ const HomePage: React.FC = () => {
 
   // Delete confirmation popup state
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(
-    null
+    null,
   );
 
   const fetchCategories = async () => {
@@ -112,14 +150,14 @@ const HomePage: React.FC = () => {
   // Compute category sums from the allAccounts array without making multiple API calls
   useEffect(() => {
     const sums: { [key: number]: number } = {};
-    categories.forEach((cat: any) => {
+    categories.forEach((cat) => {
       // Assume each account has a property category_id
       const accountsForCat = allAccounts.filter(
-        (acc) => acc.category_id === cat.category_id
+        (acc) => acc.category_id === cat.category_id,
       );
       const sum = accountsForCat.reduce(
         (accum, account) => accum + Number(account.balance),
-        0
+        0,
       );
       sums[cat.category_id] = sum;
     });
@@ -127,10 +165,21 @@ const HomePage: React.FC = () => {
   }, [categories, allAccounts]);
 
   // Opens the update modal with pre-filled category data
-  const openUpdateModal = (cat: any) => {
+  const openUpdateModal = (cat: Category) => {
     setCategoryToUpdate(cat);
     setUpdateName(cat.name);
     setUpdateDescription(cat.description || "");
+    setUpdateAllocations(
+      categories.reduce(
+        (allocations, category) => {
+          allocations[category.category_id] = toAllocationInput(
+            category.allocationPercent,
+          );
+          return allocations;
+        },
+        {} as { [key: number]: string },
+      ),
+    );
     setUpdateError("");
     setActiveOptions(null);
   };
@@ -150,20 +199,22 @@ const HomePage: React.FC = () => {
         return;
       }
       try {
+        const updatedAllocationPercent =
+          updateAllocations[categoryToUpdate.category_id];
         const updatedData = {
           name: updateName,
           description: updateDescription,
+          allocationPercent: updatedAllocationPercent,
+          rebalance: categories.map((cat) => ({
+            category_id: cat.category_id,
+            allocationPercent: updateAllocations[cat.category_id],
+          })),
         };
         await updateCategory(categoryToUpdate.category_id, updatedData);
-        setCategories((prev) =>
-          prev.map((cat) =>
-            cat.category_id === categoryToUpdate.category_id
-              ? { ...cat, ...updatedData }
-              : cat
-          )
-        );
+        await fetchCategories();
         closeUpdateModal();
       } catch (error) {
+        setUpdateError(getCategoryApiErrorMessage(error));
         console.error("Error updating category:", error);
       }
     }
@@ -173,6 +224,18 @@ const HomePage: React.FC = () => {
   const openCreateModal = () => {
     setNewName("");
     setNewDescription("");
+    setNewAllocationPercent("");
+    setCreateAllocations(
+      categories.reduce(
+        (allocations, category) => {
+          allocations[category.category_id] = toAllocationInput(
+            category.allocationPercent,
+          );
+          return allocations;
+        },
+        {} as { [key: number]: string },
+      ),
+    );
     setCreateError("");
     setIsCreateModalOpen(true);
   };
@@ -194,11 +257,17 @@ const HomePage: React.FC = () => {
       const newCategoryData = {
         name: newName,
         description: newDescription,
+        allocationPercent: newAllocationPercent,
+        rebalance: categories.map((cat) => ({
+          category_id: cat.category_id,
+          allocationPercent: createAllocations[cat.category_id],
+        })),
       };
       await createCategory(newCategoryData);
-      fetchCategories();
+      await fetchCategories();
       closeCreateModal();
     } catch (error) {
+      setCreateError(getCategoryApiErrorMessage(error));
       console.error("Error creating category:", error);
     }
   };
@@ -206,12 +275,18 @@ const HomePage: React.FC = () => {
   // Delete a category directly if no accounts exist
   const handleDeleteCategory = async (
     category_id: string | number,
-    options?: any
+    options?: Record<string, unknown>,
   ) => {
     try {
-      await deleteCategory(category_id, options);
+      const rebalance = categories
+        .filter((cat) => cat.category_id !== category_id)
+        .map((cat) => ({
+          category_id: cat.category_id,
+          allocationPercent: cat.allocationPercent,
+        }));
+      await deleteCategory(category_id, { ...options, rebalance });
       setCategories((prev) =>
-        prev.filter((cat) => cat.category_id !== category_id)
+        prev.filter((cat) => cat.category_id !== category_id),
       );
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -219,7 +294,9 @@ const HomePage: React.FC = () => {
   };
 
   // When user clicks Delete from the options dropdown, check if category has accounts.
-  const handleAttemptDelete = async (cat: any) => {
+  const handleAttemptDelete = async (
+    cat: Category & { accounts?: Account[] },
+  ) => {
     const response = await getItems({
       type: "category_id",
       value: cat.category_id,
@@ -294,7 +371,7 @@ const HomePage: React.FC = () => {
           ) : mainAccount ? (
             <div style={styles.mainAccountCard}>
               <p style={styles.mainAccountBalance}>
-                ${parseFloat(mainAccount.balance).toFixed(2)}
+                ${Number(mainAccount.balance).toFixed(2)}
               </p>
             </div>
           ) : (
@@ -339,6 +416,9 @@ const HomePage: React.FC = () => {
                   <div style={styles.categoryInfo}>
                     <h4 style={styles.categoryName}>{capitalize(cat.name)}</h4>
                     <p style={styles.categoryDescription}>{cat.description}</p>
+                    <p style={styles.categoryAllocation}>
+                      Allocation: {Number(cat.allocationPercent).toFixed(2)}%
+                    </p>
                     <p style={styles.categorySum}>
                       Total: $
                       {categorySums[cat.category_id] !== undefined
@@ -354,7 +434,7 @@ const HomePage: React.FC = () => {
                       setActiveOptions(
                         activeOptions === cat.category_id
                           ? null
-                          : cat.category_id
+                          : cat.category_id,
                       )
                     }
                   >
@@ -421,6 +501,30 @@ const HomePage: React.FC = () => {
                   style={styles.inputField}
                 />
               </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Allocation percentages:</label>
+                {categories.map((cat) => (
+                  <div key={cat.category_id} style={styles.allocationRow}>
+                    <span style={styles.allocationName}>
+                      {capitalize(cat.name)}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={updateAllocations[cat.category_id] ?? ""}
+                      onChange={(e) =>
+                        setUpdateAllocations((prev) => ({
+                          ...prev,
+                          [cat.category_id]: e.target.value,
+                        }))
+                      }
+                      style={styles.allocationInput}
+                    />
+                  </div>
+                ))}
+              </div>
               {updateError && <p style={styles.errorText}>{updateError}</p>}
               <div style={styles.modalButtons}>
                 <button type="submit" style={styles.modalButton}>
@@ -462,6 +566,42 @@ const HomePage: React.FC = () => {
                   onChange={(e) => setNewDescription(e.target.value)}
                   style={styles.inputField}
                 />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Allocation percentages:</label>
+                {categories.map((cat) => (
+                  <div key={cat.category_id} style={styles.allocationRow}>
+                    <span style={styles.allocationName}>
+                      {capitalize(cat.name)}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={createAllocations[cat.category_id] ?? ""}
+                      onChange={(e) =>
+                        setCreateAllocations((prev) => ({
+                          ...prev,
+                          [cat.category_id]: e.target.value,
+                        }))
+                      }
+                      style={styles.allocationInput}
+                    />
+                  </div>
+                ))}
+                <div style={styles.allocationRow}>
+                  <span style={styles.allocationName}>New category</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={newAllocationPercent}
+                    onChange={(e) => setNewAllocationPercent(e.target.value)}
+                    style={styles.allocationInput}
+                  />
+                </div>
               </div>
               {createError && <p style={styles.errorText}>{createError}</p>}
               <div style={styles.modalButtons}>
@@ -650,6 +790,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#666",
     margin: 0,
   },
+  categoryAllocation: {
+    fontSize: "16px",
+    color: "#1976d2",
+    fontWeight: 600,
+    marginTop: "5px",
+  },
   categorySum: {
     fontSize: "16px",
     color: "#2e7d32",
@@ -745,6 +891,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     border: "1px solid #ccc",
     outline: "none",
     transition: "border-color 0.3s ease",
+  },
+  allocationRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginBottom: "10px",
+  },
+  allocationName: {
+    flex: 1,
+    fontSize: "15px",
+    color: "#555",
+  },
+  allocationInput: {
+    width: "120px",
+    padding: "8px 10px",
+    fontSize: "16px",
+    borderRadius: "4px",
+    border: "1px solid #ccc",
   },
   errorText: {
     color: "#d32f2f",
