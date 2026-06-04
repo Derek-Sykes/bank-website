@@ -9,7 +9,26 @@ interface Category {
   name: string;
   description: string;
   user_id: number;
-  // any other properties...
+}
+
+interface Item {
+  item_id: number;
+  name: string;
+  description?: string | null;
+  cost?: number | string | null;
+  balance?: number | string | null;
+  category_id?: number | null;
+  status?: string | null;
+}
+
+interface ApiErrorResponse {
+  response?: {
+    data?:
+      | {
+          message?: string;
+        }
+      | string;
+  };
 }
 
 const CategoryPage: React.FC = () => {
@@ -19,16 +38,22 @@ const CategoryPage: React.FC = () => {
   const auth = useContext(AuthContext);
 
   // Destructure transfer along with other API functions.
-  const { getItems, createItem, updateItem, deleteItem, transfer } =
-    useItemsApi();
+  const {
+    getItems,
+    createItem,
+    updateItem,
+    deleteItem,
+    transfer,
+    purchaseItem,
+  } = useItemsApi();
 
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   // For the options dropdown on each account
   const [activeOptions, setActiveOptions] = useState<number | null>(null);
 
   // Update modal state
-  const [itemToUpdate, setItemToUpdate] = useState<any | null>(null);
+  const [itemToUpdate, setItemToUpdate] = useState<Item | null>(null);
   const [updateName, setUpdateName] = useState("");
   const [updateCost, setUpdateCost] = useState<number>(0);
   const [updateDescription, setUpdateDescription] = useState("");
@@ -40,6 +65,15 @@ const CategoryPage: React.FC = () => {
   const [newCost, setNewCost] = useState<number>(100);
   const [newDescription, setNewDescription] = useState("");
   const [createError, setCreateError] = useState("");
+
+  // Purchase modal state
+  const [itemToPurchase, setItemToPurchase] = useState<Item | null>(null);
+  const [purchaseAmount, setPurchaseAmount] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [purchaseNote, setPurchaseNote] = useState("");
+  const [purchaseError, setPurchaseError] = useState("");
 
   const fetchItems = async () => {
     setLoadingItems(true);
@@ -64,10 +98,10 @@ const CategoryPage: React.FC = () => {
   }, [auth?.accessToken]);
 
   // Opens the update modal and pre-fills form with current data
-  const openUpdateModal = (item: any) => {
+  const openUpdateModal = (item: Item) => {
     setItemToUpdate(item);
     setUpdateName(item.name);
-    setUpdateCost(item.cost);
+    setUpdateCost(Number(item.cost || 0));
     setUpdateDescription(item.description || "");
     setUpdateError("");
     setActiveOptions(null); // Close the options dropdown if open
@@ -83,9 +117,9 @@ const CategoryPage: React.FC = () => {
   const handleSubmitUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (itemToUpdate) {
-      if (updateCost < itemToUpdate.balance) {
+      if (updateCost < Number(itemToUpdate.balance || 0)) {
         setUpdateError(
-          "Cost cannot be lower than balance. Please move money out of this account first."
+          "Cost cannot be lower than balance. Please move money out of this account first.",
         );
         return;
       }
@@ -101,8 +135,8 @@ const CategoryPage: React.FC = () => {
           prev.map((item) =>
             item.item_id === itemToUpdate.item_id
               ? { ...item, ...updatedData }
-              : item
-          )
+              : item,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -126,6 +160,20 @@ const CategoryPage: React.FC = () => {
     setCreateError("");
   };
 
+  const openPurchaseModal = (item: Item) => {
+    setItemToPurchase(item);
+    setPurchaseAmount(String(item.cost || item.balance || 0));
+    setPurchaseDate(new Date().toISOString().slice(0, 10));
+    setPurchaseNote("");
+    setPurchaseError("");
+    setActiveOptions(null);
+  };
+
+  const closePurchaseModal = () => {
+    setItemToPurchase(null);
+    setPurchaseError("");
+  };
+
   // Submit new account data after validating cost
   const handleSubmitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +191,7 @@ const CategoryPage: React.FC = () => {
         category_id: category.category_id,
       };
       const response = await createItem(newItemData);
-      setItems((prev) => [...prev, response.data]);
+      setItems((prev) => [...prev, response.data as Item]);
       fetchItems();
       closeCreateModal();
     } catch (error) {
@@ -151,8 +199,47 @@ const CategoryPage: React.FC = () => {
     }
   };
 
+  const getErrorMessage = (error: unknown) => {
+    const apiError = error as ApiErrorResponse;
+    const responseData = apiError.response?.data;
+
+    if (typeof responseData === "string") return responseData;
+
+    return responseData?.message || "Purchase failed. Please try again.";
+  };
+
+  const handleSubmitPurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPurchaseError("");
+
+    if (!itemToPurchase) return;
+
+    const numericPurchaseAmount = Number(purchaseAmount);
+    if (!Number.isFinite(numericPurchaseAmount) || numericPurchaseAmount <= 0) {
+      setPurchaseError("Purchase amount must be greater than 0.");
+      return;
+    }
+
+    if (!purchaseDate) {
+      setPurchaseError("Purchase date is required.");
+      return;
+    }
+
+    try {
+      await purchaseItem(itemToPurchase.item_id, {
+        purchaseAmount: numericPurchaseAmount,
+        purchaseDate,
+        note: purchaseNote || null,
+      });
+      await fetchItems();
+      closePurchaseModal();
+    } catch (error) {
+      setPurchaseError(getErrorMessage(error));
+    }
+  };
+
   // New function: Delete an account with auto-transfer if it has a balance.
-  const handleDeleteAccount = async (account: any) => {
+  const handleDeleteAccount = async (account: Item) => {
     // If account has a non-zero balance, automatically transfer its funds to the main account.
     if (Number(account.balance) > 0) {
       try {
@@ -163,11 +250,15 @@ const CategoryPage: React.FC = () => {
           Array.isArray(response.data) &&
           response.data.length > 0
         ) {
-          const mainAccount = response.data[0];
+          const mainAccount = response.data[0] as Item;
           // Transfer funds: from the account to be deleted (account.item_id) to the main account.
-          await transfer(account.item_id, mainAccount.item_id, account.balance);
+          await transfer(
+            account.item_id,
+            mainAccount.item_id,
+            Number(account.balance || 0),
+          );
           console.log(
-            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`
+            `Transferred $${account.balance} from account ${account.item_id} to main account ${mainAccount.item_id}`,
           );
         } else {
           console.error("Main account not found. Cannot transfer funds.");
@@ -181,7 +272,7 @@ const CategoryPage: React.FC = () => {
     try {
       await deleteItem(account.item_id);
       setItems((prev) =>
-        prev.filter((item) => item.item_id !== account.item_id)
+        prev.filter((item) => item.item_id !== account.item_id),
       );
     } catch (error) {
       console.error("Error deleting account:", error);
@@ -218,8 +309,11 @@ const CategoryPage: React.FC = () => {
               <div style={styles.accountInfo}>
                 <h3 style={styles.accountName}>{item.name}</h3>
                 <p style={styles.accountDetails}>
-                  Balance: ${item.balance ? item.balance.toFixed(2) : "0"}{" "}
-                  &nbsp;|&nbsp; Cost: ${item.cost ? item.cost.toFixed(2) : "0"}
+                  Balance: $
+                  {item.balance ? Number(item.balance).toFixed(2) : "0"}{" "}
+                  &nbsp;|&nbsp; Cost: $
+                  {item.cost ? Number(item.cost).toFixed(2) : "0"}
+                  {item.status && <>&nbsp;|&nbsp; Status: {item.status}</>}
                 </p>
                 <p style={styles.accountDescription}>{item.description}</p>
               </div>
@@ -228,7 +322,7 @@ const CategoryPage: React.FC = () => {
                   style={styles.optionsButton}
                   onClick={() =>
                     setActiveOptions(
-                      activeOptions === item.item_id ? null : item.item_id
+                      activeOptions === item.item_id ? null : item.item_id,
                     )
                   }
                 >
@@ -241,6 +335,16 @@ const CategoryPage: React.FC = () => {
                       onClick={() => openUpdateModal(item)}
                     >
                       Modify
+                    </button>
+                    <button
+                      style={styles.dropdownItem}
+                      onClick={() => openPurchaseModal(item)}
+                      disabled={
+                        item.status === "PURCHASED" ||
+                        item.status === "CANCELLED"
+                      }
+                    >
+                      Mark as Purchased
                     </button>
                     <button
                       style={styles.dropdownItem}
@@ -302,7 +406,7 @@ const CategoryPage: React.FC = () => {
                 <label style={styles.label}>Balance:</label>
                 <input
                   type="number"
-                  value={itemToUpdate.balance}
+                  value={itemToUpdate.balance || 0}
                   style={{ ...styles.inputField, backgroundColor: "#f0f0f0" }}
                   readOnly
                 />
@@ -316,6 +420,77 @@ const CategoryPage: React.FC = () => {
                   type="button"
                   style={styles.modalButton}
                   onClick={closeUpdateModal}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Modal */}
+      {itemToPurchase && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h2 style={styles.modalTitle}>Mark as Purchased</h2>
+            <form onSubmit={handleSubmitPurchase}>
+              <p style={styles.accountDetails}>
+                Confirm purchase for <strong>{itemToPurchase.name}</strong>.
+              </p>
+              <p style={styles.accountDetails}>
+                Allocated amount: $
+                {Number(itemToPurchase.balance || 0).toFixed(2)}
+              </p>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Purchase Amount:</label>
+                <input
+                  type="number"
+                  value={purchaseAmount}
+                  onChange={(e) => setPurchaseAmount(e.target.value)}
+                  style={styles.inputField}
+                  step="0.01"
+                  min="0.01"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Purchase Date:</label>
+                <input
+                  type="date"
+                  value={purchaseDate}
+                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  style={styles.inputField}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Note (optional):</label>
+                <input
+                  type="text"
+                  value={purchaseNote}
+                  onChange={(e) => setPurchaseNote(e.target.value)}
+                  style={styles.inputField}
+                  placeholder="Add purchase details"
+                />
+              </div>
+              {Number(purchaseAmount) > Number(itemToPurchase.balance || 0) && (
+                <p style={styles.warningText}>
+                  This purchase exceeds the allocated amount. The difference of
+                  $
+                  {(
+                    Number(purchaseAmount) - Number(itemToPurchase.balance || 0)
+                  ).toFixed(2)}{" "}
+                  will be taken from your Main Account.
+                </p>
+              )}
+              {purchaseError && <p style={styles.errorText}>{purchaseError}</p>}
+              <div style={styles.modalButtons}>
+                <button type="submit" style={styles.modalButton}>
+                  Confirm Purchase
+                </button>
+                <button
+                  type="button"
+                  style={styles.modalButton}
+                  onClick={closePurchaseModal}
                 >
                   Cancel
                 </button>
@@ -575,6 +750,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: "#d32f2f",
     fontSize: "14px",
     marginTop: "5px",
+  },
+  warningText: {
+    color: "#ed6c02",
+    backgroundColor: "#fff4e5",
+    borderRadius: "4px",
+    fontSize: "14px",
+    marginTop: "5px",
+    padding: "10px",
   },
   modalButtons: {
     display: "flex",

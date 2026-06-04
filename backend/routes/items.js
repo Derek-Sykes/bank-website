@@ -7,6 +7,7 @@ import {
   updateItem,
   deleteItem,
   transfer,
+  purchaseItem,
 } from "./../db/itemDB.js";
 
 router.get("/test", (req, res) => {
@@ -92,6 +93,23 @@ router.route("/transfer").put(async (req, res) => {
     res.status(400).send("Error updating item, see console.");
   } else {
     res.status(200).send("Item updated");
+  }
+});
+
+router.post("/:id/purchase", async (req, res) => {
+  const user_id = req.user.user_id;
+  const { purchaseAmount, purchaseDate, note = null } = req.body;
+
+  const result = await purchaseItem(req.params.id, user_id, {
+    purchaseAmount,
+    purchaseDate,
+    note,
+  });
+
+  if (result.error) {
+    res.status(result.status || 400).json({ message: result.error });
+  } else {
+    res.status(200).json(result.data);
   }
 });
 
