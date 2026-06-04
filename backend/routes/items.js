@@ -1,131 +1,127 @@
 import express from "express";
+import { sendApiError } from "../src/lib/apiError.ts";
+import {
+  addMoney,
+  cancel,
+  purchase,
+  transfer,
+} from "../src/services/accountService.ts";
+import { setItemAllocations } from "../src/services/allocationService.ts";
+import {
+  createItem,
+  deleteItem,
+  getItems,
+  updateItem,
+} from "../src/services/itemService.ts";
 
 const router = express.Router();
-import {
-  postItem,
-  getItemBy,
-  updateItem,
-  deleteItem,
-  transfer,
-} from "./../db/itemDB.js";
 
-router.get("/test", (req, res) => {
+router.get("/test", (_req, res) => {
   res.send("Hello, World!");
 });
-// insert an item into the db with only the name being required as input
+
 router
   .route("/item")
   .get(async (req, res) => {
-    const { type, value } = req.query;
-    let user_id;
-    if (req.user) {
-      user_id = req.user.user_id;
-    } else {
-      user_id = null;
-    }
-    let items = await getItemBy(user_id, type, value);
-    if (items) {
-      res.status(200).send(items);
-    } else {
-      res.status(400).send("Error getting items see console.");
+    try {
+      const { type, value } = req.query;
+      res
+        .status(200)
+        .json(await getItems(req.user?.user_id ?? null, type, value));
+    } catch (error) {
+      sendApiError(res, error);
     }
   })
   .post(async (req, res) => {
-    const { name, description, cost, category_id } = req.body;
-    const balance = 0;
-    let user_id;
-    if (req.user) {
-      user_id = req.user.user_id;
-    } else {
-      user_id = null;
-    }
-
-    const item = { name, description, cost, balance, category_id, user_id };
-    let feedback = await postItem(item);
-    if (feedback === 1) {
-      res.status(200).send("Successful post");
-    } else {
-      res.status(400).send("Error posting");
+    try {
+      res.status(201).json(await createItem(req.user.user_id, req.body));
+    } catch (error) {
+      sendApiError(res, error);
     }
   })
   .put(async (req, res) => {
-    const {
-      item_id,
-      name = null,
-      description = null,
-      cost = null,
-      balance = null,
-      category_id = null,
-    } = req.body;
-    let user_id = req.user.user_id;
-    let error = await updateItem(
-      item_id,
-      name,
-      description,
-      cost,
-      balance,
-      category_id,
-      user_id,
-    );
-    if (error) {
-      res.status(400).send("Error updating item, see console.");
-    } else {
-      res.status(200).send("Item updated");
+    try {
+      const { item_id, ...input } = req.body;
+      res
+        .status(200)
+        .json(await updateItem(req.user.user_id, Number(item_id), input));
+    } catch (error) {
+      sendApiError(res, error);
     }
   })
   .delete(async (req, res) => {
-    const { item_id } = req.body;
-    let user_id = req.user.user_id;
-    let error = await deleteItem(item_id, user_id);
-    if (error) {
-      res.status(400).send("Error deleting item, see console.");
-    } else {
-      res.status(200).send("Item deleted");
+    try {
+      await deleteItem(req.user.user_id, Number(req.body.item_id));
+      res.status(200).json({ message: "Item deleted" });
+    } catch (error) {
+      sendApiError(res, error);
     }
   });
 
-router.route("/transfer").put(async (req, res) => {
-  const { item_id1, item_id2, amount = null } = req.body;
-  const user_id = req.user.user_id;
-  let error = await transfer(item_id1, item_id2, amount, user_id);
-  if (error) {
-    res.status(400).send("Error updating item, see console.");
-  } else {
-    res.status(200).send("Item updated");
+router.put("/transfer", async (req, res) => {
+  try {
+    const { item_id1, item_id2, amount } = req.body;
+    res
+      .status(200)
+      .json(
+        await transfer(
+          req.user.user_id,
+          Number(item_id1),
+          Number(item_id2),
+          Number(amount),
+        ),
+      );
+  } catch (error) {
+    sendApiError(res, error);
   }
 });
 
-// router.post("/makeItem", async (req, res) => {
-//   const { name, description, cost, category_id } = req.body;
-//   let user_id;
-//   if (req.user) {
-//     user_id = req.user.user_id;
-//   } else {
-//     user_id = null;
-//   }
+router.post("/add-money", async (req, res) => {
+  try {
+    res
+      .status(200)
+      .json(await addMoney(req.user.user_id, Number(req.body.amount)));
+  } catch (error) {
+    sendApiError(res, error);
+  }
+});
 
-//   const item = { name, description, cost, category_id, user_id };
-//   let feedback = await postItem(item);
-//   if (feedback === 1) {
-//     res.status(200).send("Successful post");
-//   } else {
-//     res.status(400).send("Error posting");
-//   }
-// });
-// // get item by one column and user_id
-// router.get("/getItem", async (req, res) => {
-//   const { type, value } = req.body;
-//   let user_id;
-//   if (req.user) {
-//     user_id = req.user.user_id;
-//   } else {
-//     user_id = null;
-//   }
-//   let items = await getItemBy(user_id, type, value);
-//   if (items) {
-//     res.status(200).send(items);
-//   } else {
-//     res.status(400).send("Error getting items see console.");
-//   }
-// });
+router.post("/purchase", async (req, res) => {
+  try {
+    res
+      .status(200)
+      .json(
+        await purchase(
+          req.user.user_id,
+          Number(req.body.item_id),
+          req.body.amount === undefined ? undefined : Number(req.body.amount),
+        ),
+      );
+  } catch (error) {
+    sendApiError(res, error);
+  }
+});
+
+router.post("/cancel", async (req, res) => {
+  try {
+    res
+      .status(200)
+      .json(await cancel(req.user.user_id, Number(req.body.item_id)));
+  } catch (error) {
+    sendApiError(res, error);
+  }
+});
+
+router.put("/allocation", async (req, res) => {
+  try {
+    res
+      .status(200)
+      .json(
+        await setItemAllocations(req.user.user_id, req.body.allocations ?? []),
+      );
+  } catch (error) {
+    sendApiError(res, error);
+  }
+});
+
 export default router;
