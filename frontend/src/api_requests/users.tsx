@@ -14,7 +14,7 @@ export const registerUser = async (
   email: string,
   password: string,
   f_name: string,
-  l_name: string
+  l_name: string,
 ) => {
   return api.post("/users/register", {
     user: { email, password, f_name, l_name },
@@ -29,6 +29,16 @@ export const loginUser = async (email: string, password: string) => {
 // Logout user
 export const logoutUser = async () => {
   return api.post("/users/logout");
+};
+
+// Request a password reset token. In development, the backend logs the token.
+export const forgotPassword = async (email: string) => {
+  return api.post("/auth/forgot-password", { email });
+};
+
+// Reset a password using a reset token.
+export const resetPassword = async (token: string, password: string) => {
+  return api.post("/auth/reset-password", { token, password });
 };
 
 // Fetch current user session (to check if logged in)
