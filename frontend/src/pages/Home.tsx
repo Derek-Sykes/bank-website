@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useContext, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../../context/AuthContext";
 import { capitalize } from "../utils/generalUtils";
 import { useCategoryApi } from "../api_requests/category";
 import { useItemsApi } from "../api_requests/items";
+import { useAccountsApi } from "../api_requests/accounts";
 import TransferFunds from "../components/TransferFunds"; // Ensure correct path
 
 type ConfirmDelete = {
@@ -18,6 +20,7 @@ const HomePage: React.FC = () => {
   const { getCategories, createCategory, updateCategory, deleteCategory } =
     useCategoryApi();
   const { getItems } = useItemsApi();
+  const { getAccount } = useAccountsApi();
 
   const [categories, setCategories] = useState<any[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -31,7 +34,7 @@ const HomePage: React.FC = () => {
 
   // State to hold the sum of balances for each category
   const [categorySums, setCategorySums] = useState<{ [key: number]: number }>(
-    {}
+    {},
   );
 
   // Options dropdown state for each category card
@@ -54,7 +57,7 @@ const HomePage: React.FC = () => {
 
   // Delete confirmation popup state
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(
-    null
+    null,
   );
 
   const fetchCategories = async () => {
@@ -74,17 +77,13 @@ const HomePage: React.FC = () => {
   const fetchMainAccount = async () => {
     setLoadingMainAccount(true);
     try {
-      // getItems with parameters { type: "category_id", value: null } returns the Main Account (first element)
-      const response = await getItems({ type: "category_id", value: null });
-      if (
-        !response.data?.accessToken &&
-        Array.isArray(response.data) &&
-        response.data.length > 0
-      ) {
-        setMainAccount(response.data[0]);
+      const response = await getAccount();
+      if (!response.data?.accessToken) {
+        setMainAccount(response.data);
       }
     } catch (error) {
       console.error("Error fetching main account:", error);
+      setMainAccount(null);
     } finally {
       setLoadingMainAccount(false);
     }
@@ -115,11 +114,11 @@ const HomePage: React.FC = () => {
     categories.forEach((cat: any) => {
       // Assume each account has a property category_id
       const accountsForCat = allAccounts.filter(
-        (acc) => acc.category_id === cat.category_id
+        (acc) => acc.category_id === cat.category_id,
       );
       const sum = accountsForCat.reduce(
         (accum, account) => accum + Number(account.balance),
-        0
+        0,
       );
       sums[cat.category_id] = sum;
     });
@@ -159,8 +158,8 @@ const HomePage: React.FC = () => {
           prev.map((cat) =>
             cat.category_id === categoryToUpdate.category_id
               ? { ...cat, ...updatedData }
-              : cat
-          )
+              : cat,
+          ),
         );
         closeUpdateModal();
       } catch (error) {
@@ -206,12 +205,12 @@ const HomePage: React.FC = () => {
   // Delete a category directly if no accounts exist
   const handleDeleteCategory = async (
     category_id: string | number,
-    options?: any
+    options?: any,
   ) => {
     try {
       await deleteCategory(category_id, options);
       setCategories((prev) =>
-        prev.filter((cat) => cat.category_id !== category_id)
+        prev.filter((cat) => cat.category_id !== category_id),
       );
     } catch (error) {
       console.error("Error deleting category:", error);
@@ -354,7 +353,7 @@ const HomePage: React.FC = () => {
                       setActiveOptions(
                         activeOptions === cat.category_id
                           ? null
-                          : cat.category_id
+                          : cat.category_id,
                       )
                     }
                   >

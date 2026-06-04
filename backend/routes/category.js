@@ -7,6 +7,7 @@ import {
   updateCategory,
   deleteCategory,
 } from "./../db/categoryDB.js";
+import { transferCategoryBalanceToAccount } from "../db/accountDB.js";
 
 router.get("/test", (req, res) => {
   res.send("Hello, World!");
@@ -50,9 +51,19 @@ router
     }
   })
   .delete(async (req, res) => {
-    //when options has a value it should call the function that redistributes the money according to the rules.
-    const { category_id, options } = req.body;
+    const { category_id, redistribution } = req.body;
     let user_id = req.user.user_id;
+
+    if (redistribution === "main") {
+      const transferError = await transferCategoryBalanceToAccount(
+        category_id,
+        user_id,
+      );
+      if (transferError) {
+        return res.status(400).send(transferError);
+      }
+    }
+
     let error = await deleteCategory(category_id, user_id);
     if (error) {
       res.status(400).send("Error deleting category, see console.");

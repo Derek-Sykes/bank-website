@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  userId       Int       @id @default(autoincrement()) @map("user_id")
+  firstName    String?   @map("f_name") @db.VarChar(45)
+  lastName     String?   @map("l_name") @db.VarChar(45)
+  email        String    @unique @db.VarChar(90)
+  password     String    @db.VarChar(60)
+  refreshToken String?   @map("refresh_token") @db.VarChar(255)
+  account      Account?
+  categories   Category[]
+  items        Item[]
+
+  @@map("user")
+}
+
+model Account {
+  accountId Int   @id @default(autoincrement()) @map("account_id")
+  userId    Int   @unique @map("user_id")
+  balance   Float @default(5000)
+  user      User  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Category {
+  categoryId  Int     @id @default(autoincrement()) @map("category_id")
+  name        String  @db.VarChar(45)
+  description String? @db.VarChar(200)
+  userId      Int?    @map("user_id")
+  user        User?   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  items       Item[]
+
+  @@map("category")
+}
+
+model Item {
+  itemId      Int       @id @default(autoincrement()) @map("item_id")
+  name        String    @db.VarChar(45)
+  description String?   @db.VarChar(200)
+  cost        Float?
+  balance     Float?    @default(0)
+  categoryId  Int?      @map("category_id")
+  userId      Int?      @map("user_id")
+  category    Category? @relation(fields: [categoryId], references: [categoryId], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("item")
+}

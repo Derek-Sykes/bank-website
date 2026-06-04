@@ -1,13 +1,8 @@
 import express from "express";
 
 const router = express.Router();
-import {
-  postItem,
-  getItemBy,
-  updateItem,
-  deleteItem,
-  transfer,
-} from "./../db/itemDB.js";
+import { postItem, getItemBy, updateItem, deleteItem } from "./../db/itemDB.js";
+import { transferFunds } from "../db/accountDB.js";
 
 router.get("/test", (req, res) => {
   res.send("Hello, World!");
@@ -87,11 +82,11 @@ router
 router.route("/transfer").put(async (req, res) => {
   const { item_id1, item_id2, amount = null } = req.body;
   const user_id = req.user.user_id;
-  let error = await transfer(item_id1, item_id2, amount, user_id);
+  let error = await transferFunds(item_id1, item_id2, amount, user_id);
   if (error) {
-    res.status(400).send("Error updating item, see console.");
+    res.status(400).send(error);
   } else {
-    res.status(200).send("Item updated");
+    res.status(200).send("Transfer completed");
   }
 });
 
