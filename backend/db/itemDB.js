@@ -1,5 +1,6 @@
 import mysql from "mysql2";
 import dotenv from "dotenv";
+import { createSystemNotification } from "./notificationDB.js";
 dotenv.config();
 
 const pool = mysql
@@ -10,6 +11,89 @@ const pool = mysql
     database: process.env.MYSQL_DATABASE,
   })
   .promise();
+
+function isFullyFunded(item) {
+  return Number(item?.cost) > 0 && Number(item?.balance) >= Number(item?.cost);
+}
+
+async function getItemById(item_id, user_id) {
+  const [items] = await pool.query(
+    `SELECT * FROM item WHERE item_id = ? AND user_id = ?`,
+    [item_id, user_id],
+  );
+  return items[0] || null;
+}
+
+async function notifyItemFullyFunded(previousItem, currentItem, user_id) {
+  if (
+    !currentItem ||
+    !isFullyFunded(currentItem) ||
+    isFullyFunded(previousItem)
+  ) {
+    return;
+  }
+
+  await createSystemNotification({
+    user_id,
+    type: "item_fully_funded",
+    title: "Goal fully funded",
+    message: `${currentItem.name} is fully funded and ready when you are.`,
+    metadata: {
+      item_id: currentItem.item_id,
+      category_id: currentItem.category_id,
+      balance: currentItem.balance,
+      cost: currentItem.cost,
+    },
+  });
+}
+
+async function notifyCategoryFullyFundedWithUnallocatedMoney(
+  category_id,
+  user_id,
+) {
+  if (!category_id) {
+    return;
+  }
+
+  const [items] = await pool.query(
+    `SELECT * FROM item WHERE category_id = ? AND user_id = ?`,
+    [category_id, user_id],
+  );
+
+  if (!items.length || !items.every(isFullyFunded)) {
+    return;
+  }
+
+  const totalBalance = items.reduce(
+    (sum, item) => sum + Number(item.balance || 0),
+    0,
+  );
+  const totalCost = items.reduce(
+    (sum, item) => sum + Number(item.cost || 0),
+    0,
+  );
+  const unallocatedAmount = totalBalance - totalCost;
+
+  if (unallocatedAmount <= 0) {
+    return;
+  }
+
+  const [[category]] = await pool.query(
+    `SELECT name FROM category WHERE category_id = ? AND user_id = ?`,
+    [category_id, user_id],
+  );
+
+  await createSystemNotification({
+    user_id,
+    type: "category_goals_funded_unallocated_money",
+    title: "Category goals funded",
+    message: `All goals in ${category?.name || "this category"} are funded, and $${unallocatedAmount.toFixed(2)} is currently unallocated.`,
+    metadata: {
+      category_id,
+      unallocatedAmount,
+    },
+  });
+}
 
 export async function postItem(item) {
   let {
@@ -30,13 +114,18 @@ export async function postItem(item) {
     user_id,
   );
   try {
-    await pool.query(
+    const [result] = await pool.query(
       `
             INSERT INTO item (name, description, cost, balance, category_id, user_id)
             VALUES (?, ?, ?, ?, ?, ?)
             `,
       [name, description, cost, balance, category_id, user_id],
     );
+
+    const currentItem = await getItemById(result.insertId, user_id);
+    await notifyItemFullyFunded(null, currentItem, user_id);
+    await notifyCategoryFullyFundedWithUnallocatedMoney(category_id, user_id);
+
     return 1;
   } catch (error) {
     let errno = error.errno;
@@ -123,6 +212,7 @@ export async function updateItem(
   const query = `UPDATE item SET name = ?, description = ?, cost = ?, balance = ?, category_id =? WHERE item_id = ? && user_id = ?`;
 
   try {
+    const previousItem = await getItemById(item_id, user_id);
     await pool.query(query, [
       name,
       description,
@@ -132,6 +222,11 @@ export async function updateItem(
       item_id,
       user_id,
     ]);
+
+    const currentItem = await getItemById(item_id, user_id);
+    await notifyItemFullyFunded(previousItem, currentItem, user_id);
+    await notifyCategoryFullyFundedWithUnallocatedMoney(category_id, user_id);
+
     return null;
   } catch (error) {
     console.log(error);
@@ -141,7 +236,24 @@ export async function updateItem(
 export async function deleteItem(item_id, user_id) {
   const query = `DELETE FROM item WHERE item_id = ? && user_id = ?`;
   try {
+    const item = await getItemById(item_id, user_id);
     await pool.query(query, [item_id, user_id]);
+
+    if (item) {
+      await createSystemNotification({
+        user_id,
+        type: "item_purchased",
+        title: "Item purchased",
+        message: `${item.name} was marked as purchased and removed from your goals.`,
+        metadata: {
+          item_id: item.item_id,
+          category_id: item.category_id,
+          balance: item.balance,
+          cost: item.cost,
+        },
+      });
+    }
+
     return null;
   } catch (error) {
     console.log(error);
@@ -170,6 +282,7 @@ export async function transfer(item_id1, item_id2, amount, user_id) {
     // 5. item_id1 (first account in the WHERE clause)
     // 6. item_id2 (second account in the WHERE clause)
     // 7. user_id (ensuring both accounts belong to this user)
+    const previousDestination = await getItemById(item_id2, user_id);
     await pool.query(query, [
       item_id1,
       amount,
@@ -179,6 +292,18 @@ export async function transfer(item_id1, item_id2, amount, user_id) {
       item_id2,
       user_id,
     ]);
+
+    const currentDestination = await getItemById(item_id2, user_id);
+    await notifyItemFullyFunded(
+      previousDestination,
+      currentDestination,
+      user_id,
+    );
+    await notifyCategoryFullyFundedWithUnallocatedMoney(
+      currentDestination?.category_id,
+      user_id,
+    );
+
     return null;
   } catch (error) {
     console.log(error);
